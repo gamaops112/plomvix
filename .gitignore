@@ -2,7 +2,7 @@
 /plomvix
 /plomvixctl
 *.exe
-
+graphify-out/
 # Data directory contents
 data/wal/**
 data/hot/**
@@ -17,6 +17,10 @@ data/cold/**
 !data/cold/metrics/.gitkeep
 !data/cold/json/.gitkeep
 !data/cold/kv/.gitkeep
+
+# System data (BoltDB auth database)
+data/system/*
+!data/system/.gitkeep
 
 # Config secrets
 .env

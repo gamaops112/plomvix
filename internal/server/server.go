@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
+	"github.com/plomvix/plomvix/internal/auth"
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/internal/logger"
 	"github.com/plomvix/plomvix/pkg/utils"
@@ -23,14 +24,18 @@ type Server struct {
 	httpServer *http.Server
 	startTime  time.Time
 	version    string
+	store      *auth.Store
+	blacklist  *auth.Blacklist
 }
 
-func New(cfg *config.Config, version string) *Server {
+func New(cfg *config.Config, version string, store *auth.Store, blacklist *auth.Blacklist) *Server {
 	s := &Server{
 		router:    chi.NewRouter(),
 		cfg:       cfg,
 		startTime: time.Now(),
 		version:   version,
+		store:     store,
+		blacklist: blacklist,
 	}
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -100,7 +105,34 @@ func (s *Server) setupMiddleware() {
 }
 
 func (s *Server) setupRoutes() {
+	authHandler := auth.NewHandler(s.store, s.blacklist, s.cfg)
+	userHandler := auth.NewUserHandler(s.store, s.cfg)
+	apiKeyHandler := auth.NewAPIKeyHandler(s.store, s.cfg)
+
+	// Public — no auth
 	s.router.Get("/health", s.handleHealth)
+	s.router.Post("/auth/login", authHandler.Login)
+
+	// Protected — auth required
+	s.router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
+		r.Post("/auth/logout", authHandler.Logout)
+		r.Post("/auth/refresh", authHandler.Refresh)
+	})
+
+	// Admin only — auth + admin role
+	s.router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
+		r.Use(auth.RequireAdmin())
+		r.Post("/admin/users", userHandler.Create)
+		r.Get("/admin/users", userHandler.List)
+		r.Get("/admin/users/{id}", userHandler.Get)
+		r.Patch("/admin/users/{id}", userHandler.Update)
+		r.Delete("/admin/users/{id}", userHandler.Delete)
+		r.Post("/admin/users/{id}/apikey", apiKeyHandler.Generate)
+		r.Delete("/admin/users/{id}/apikey", apiKeyHandler.Revoke)
+		r.Get("/admin/users/{id}/apikey/status", apiKeyHandler.Status)
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
