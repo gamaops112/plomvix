@@ -1,0 +1,36 @@
+# Plomvix Configuration
+
+# Environment mode: development | production
+# In production mode, unsafe defaults are rejected at startup.
+env: development
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 30
+  write_timeout: 30
+  idle_timeout: 60
+
+storage:
+  data_dir: ./data
+  wal_flush_threshold: 67108864
+  hot_tier_max_size: 10737418240
+  retention_days: 30
+
+compression:
+  hot_tier: snappy
+  cold_tier: zstd
+
+indexing:
+  auto_index_timestamp: true
+
+auth:
+  default_admin_username: admin
+  default_admin_password: changeme
+  jwt_secret: plomvix-change-in-prod
+  jwt_expiry_seconds: 3600
+  api_key_length: 32
+
+logging:
+  level: info
+  format: pretty
