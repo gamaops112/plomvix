@@ -13,6 +13,7 @@ const (
 	CodeInternalError     = "INTERNAL_ERROR"
 	CodeHealthCheckFailed = "HEALTH_CHECK_FAILED"
 	CodeServiceUnavail    = "SERVICE_UNAVAILABLE"
+	CodeConflict          = "CONFLICT"
 )
 
 type Response struct {
@@ -120,5 +121,14 @@ func ServiceUnavailable(w http.ResponseWriter, r *http.Request, code, message st
 			Message: message,
 			Details: details,
 		},
+	})
+}
+
+func Conflict(w http.ResponseWriter, r *http.Request, message string) {
+	requestID := r.Header.Get("X-Request-ID")
+	writeJSON(w, http.StatusConflict, ErrorResponse{
+		Status:    "error",
+		Error:     ErrorBody{Code: CodeConflict, Message: message},
+		RequestID: requestID,
 	})
 }

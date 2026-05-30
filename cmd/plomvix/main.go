@@ -13,6 +13,7 @@ import (
 	figure "github.com/common-nighthawk/go-figure"
 	"go.uber.org/zap"
 
+	"github.com/plomvix/plomvix/internal/auth"
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/internal/logger"
 	"github.com/plomvix/plomvix/internal/server"
@@ -66,7 +67,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := server.New(cfg, Version)
+	// Open user store
+	store, err := auth.NewStore(
+		filepath.Join(cfg.Storage.DataDir, "system", "auth.db"))
+	if err != nil {
+		logger.Error("failed to open user store", zap.Error(err))
+		os.Exit(1)
+	}
+
+	// Bootstrap admin user
+	if err := auth.BootstrapAdminUser(store, cfg); err != nil {
+		store.Close()
+		logger.Error("failed to bootstrap admin user", zap.Error(err))
+		os.Exit(1)
+	}
+	defer store.Close()
+
+	// Create blacklist
+	blacklist := auth.NewBlacklist()
+	defer blacklist.Stop()
+
+	srv := server.New(cfg, Version, store, blacklist)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -112,6 +133,7 @@ func bootstrapDataDirs(cfg *config.Config) error {
 		filepath.Join(cfg.Storage.DataDir, "cold", "metrics"),
 		filepath.Join(cfg.Storage.DataDir, "cold", "json"),
 		filepath.Join(cfg.Storage.DataDir, "cold", "kv"),
+		filepath.Join(cfg.Storage.DataDir, "system"),
 	}
 	for _, dir := range dirs {
 		if err := utils.EnsureDir(dir); err != nil {
