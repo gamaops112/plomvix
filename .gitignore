@@ -1,0 +1,46 @@
+# Binaries
+/plomvix
+/plomvixctl
+*.exe
+graphify-out/
+# Data directory contents
+data/wal/**
+data/hot/**
+data/cold/**
+!data/wal/.gitkeep
+!data/hot/.gitkeep
+!data/cold/logs/
+!data/cold/metrics/
+!data/cold/json/
+!data/cold/kv/
+!data/cold/logs/.gitkeep
+!data/cold/metrics/.gitkeep
+!data/cold/json/.gitkeep
+!data/cold/kv/.gitkeep
+
+# System data (BoltDB auth database)
+data/system/*
+!data/system/.gitkeep
+
+# Config secrets
+.env
+*.local.yaml
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Test coverage
+coverage.out
+coverage.html
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test scripts
+smoke_test.sh
