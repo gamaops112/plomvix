@@ -18,6 +18,8 @@ import (
 	"github.com/plomvix/plomvix/internal/logger"
 	"github.com/plomvix/plomvix/internal/server"
 	"github.com/plomvix/plomvix/pkg/utils"
+
+	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
 )
 
 var (
@@ -87,7 +89,30 @@ func main() {
 	blacklist := auth.NewBlacklist()
 	defer blacklist.Stop()
 
-	srv := server.New(cfg, Version, store, blacklist)
+	// Open WAL
+	wal, err := walmanager.Open(
+		filepath.Join(cfg.Storage.DataDir, "wal"), cfg)
+	if err != nil {
+		logger.Error("failed to open WAL", zap.Error(err))
+		os.Exit(1)
+	}
+
+	// Run recovery — logs entries found, does not replay in Sprint 3
+	entries, err := wal.Recover()
+	if err != nil {
+		wal.Close()
+		logger.Error("WAL recovery failed", zap.Error(err))
+		os.Exit(1)
+	}
+	defer wal.Close()
+
+	logger.Info("WAL recovery complete",
+		zap.Int("entries_recovered", len(entries)),
+		zap.Int("segments_found", wal.Stats().SegmentCount),
+	)
+	_ = entries // suppress unused variable warning
+
+	srv := server.New(cfg, Version, store, blacklist, wal)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
