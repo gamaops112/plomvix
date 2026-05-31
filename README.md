@@ -211,9 +211,9 @@ plomvix/
 ## Roadmap
 
 - [x] Sprint 1 — Project skeleton (config, logger, HTTP server, health check)
-- [ ] Sprint 2 — Auth system (JWT + API key)
-- [ ] Sprint 3 — Write Ahead Log (WAL)
-- [ ] Sprint 4 — Hot tier (RocksDB)
+- [x] Sprint 2 — Auth system (JWT + API key)
+- [x] Sprint 3 — Write Ahead Log (WAL)
+- [x] Sprint 4 — Hot tier (RocksDB)
 - [ ] Sprint 5 — Ingestion API + Schema inference engine
 - [ ] Sprint 6 — SQL query engine (hot tier)
 - [ ] Sprint 7 — Cold tier (Parquet) + Tiering policy
