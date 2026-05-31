@@ -16,6 +16,7 @@ import (
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/internal/ingestion"
 	"github.com/plomvix/plomvix/internal/logger"
+	"github.com/plomvix/plomvix/internal/query"
 	"github.com/plomvix/plomvix/pkg/utils"
 
 	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
@@ -139,6 +140,18 @@ func (s *Server) setupRoutes() {
 		r.Post("/ingest/metrics", ingestHandler.IngestMetrics)
 		r.Post("/ingest/json", ingestHandler.IngestJSON)
 		r.Post("/ingest/kv", ingestHandler.IngestKV)
+	})
+
+	// Query — auth required
+	queryEngine  := query.NewEngine(s.hotTier)
+	queryHandler := query.NewHandler(queryEngine)
+	s.router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
+		r.Get("/query/logs",            queryHandler.QueryLogs)
+		r.Get("/query/metrics",         queryHandler.QueryMetrics)
+		r.Get("/query/json",            queryHandler.QueryJSON)
+		r.Get("/query/kv/{key}",        queryHandler.QueryKV)
+		r.Get("/query/schema/{type}",   queryHandler.QuerySchema)
 	})
 
 	// Admin only — auth + admin role

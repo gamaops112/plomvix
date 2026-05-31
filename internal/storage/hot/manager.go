@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/plomvix/plomvix/internal/config"
 	walstore "github.com/plomvix/plomvix/internal/storage/wal"
@@ -139,6 +140,24 @@ func (m *Manager) GetMeta(key []byte) ([]byte, error) {
 // PutMeta writes a key-value pair to the _meta column family.
 func (m *Manager) PutMeta(key, value []byte) error {
 	return m.store.Put(CFMeta, key, value)
+}
+
+// ScanCF iterates a time-series column family in the range [fromNs, toNs)
+// and calls fn for each raw payload. If fn returns false, iteration stops.
+// fromNs=0 scans from the beginning. toNs=0 scans to the current time.
+func (m *Manager) ScanCF(cf string, fromNs, toNs int64, fn func(payload []byte) bool) error {
+	if toNs == 0 {
+		toNs = time.Now().UnixNano()
+	}
+	return m.store.Scan(cf, BuildRangeScanPrefix(fromNs), func(key, value []byte) bool {
+		if toNs > 0 && len(key) >= 8 {
+			keyTs := binary.BigEndian.Uint64(key[:8])
+			if int64(keyTs) >= toNs {
+				return false
+			}
+		}
+		return fn(value)
+	})
 }
 
 func (m *Manager) Close() {
