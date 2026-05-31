@@ -14,6 +14,7 @@ import (
 
 	"github.com/plomvix/plomvix/internal/auth"
 	"github.com/plomvix/plomvix/internal/config"
+	"github.com/plomvix/plomvix/internal/ingestion"
 	"github.com/plomvix/plomvix/internal/logger"
 	"github.com/plomvix/plomvix/pkg/utils"
 
@@ -130,6 +131,16 @@ func (s *Server) setupRoutes() {
 		r.Post("/auth/refresh", authHandler.Refresh)
 	})
 
+	// Ingestion — auth required
+	ingestHandler := ingestion.NewHandler(s.hotTier, s.wal)
+	s.router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
+		r.Post("/ingest/logs", ingestHandler.IngestLogs)
+		r.Post("/ingest/metrics", ingestHandler.IngestMetrics)
+		r.Post("/ingest/json", ingestHandler.IngestJSON)
+		r.Post("/ingest/kv", ingestHandler.IngestKV)
+	})
+
 	// Admin only — auth + admin role
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
@@ -188,8 +199,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			"total_entries":     walStats.TotalEntries,
 		},
 		"hot": map[string]interface{}{
-			"total_writes": hotStats.TotalWrites,
-			"data_dir":     hotStats.DataDir,
+			"total_writes":      hotStats.TotalWrites,
+			"total_data_writes": hotStats.TotalDataWrites,
+			"data_dir":          hotStats.DataDir,
 		},
 	})
 }
