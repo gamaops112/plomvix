@@ -18,6 +18,8 @@ import (
 	"github.com/plomvix/plomvix/pkg/utils"
 
 	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
+
+	hotmanager "github.com/plomvix/plomvix/internal/storage/hot"
 )
 
 type Server struct {
@@ -29,10 +31,12 @@ type Server struct {
 	store      *auth.Store
 	blacklist  *auth.Blacklist
 	wal        *walmanager.Manager
+	hotTier    *hotmanager.Manager
 }
 
 func New(cfg *config.Config, version string, store *auth.Store,
-	blacklist *auth.Blacklist, wal *walmanager.Manager) *Server {
+	blacklist *auth.Blacklist, wal *walmanager.Manager,
+	hotTier *hotmanager.Manager) *Server {
 	s := &Server{
 		router:    chi.NewRouter(),
 		cfg:       cfg,
@@ -41,6 +45,7 @@ func New(cfg *config.Config, version string, store *auth.Store,
 		store:     store,
 		blacklist: blacklist,
 		wal:       wal,
+		hotTier:   hotTier,
 	}
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -167,7 +172,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats := s.wal.Stats()
+	walStats := s.wal.Stats()
+	hotStats := s.hotTier.Stats()
 	utils.OK(w, r, map[string]interface{}{
 		"version":        s.version,
 		"env":            s.cfg.Env,
@@ -176,10 +182,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"go_version":     utils.GetGoVersion(),
 		"os_arch":        utils.GetOSArch(),
 		"wal": map[string]interface{}{
-			"segment_count":     stats.SegmentCount,
-			"active_segment":    stats.ActiveSegment,
-			"active_size_bytes": stats.ActiveSizeBytes,
-			"total_entries":     stats.TotalEntries,
+			"segment_count":     walStats.SegmentCount,
+			"active_segment":    walStats.ActiveSegment,
+			"active_size_bytes": walStats.ActiveSizeBytes,
+			"total_entries":     walStats.TotalEntries,
+		},
+		"hot": map[string]interface{}{
+			"total_writes": hotStats.TotalWrites,
+			"data_dir":     hotStats.DataDir,
 		},
 	})
 }
