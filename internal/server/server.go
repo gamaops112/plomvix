@@ -28,15 +28,15 @@ import (
 )
 
 type Server struct {
-	router     *chi.Mux
-	cfg        *config.Config
-	httpServer *http.Server
-	startTime  time.Time
-	version    string
-	store      *auth.Store
-	blacklist  *auth.Blacklist
-	wal        *walmanager.Manager
-	hotTier    *hotmanager.Manager
+	router       *chi.Mux
+	cfg          *config.Config
+	httpServer   *http.Server
+	startTime    time.Time
+	version      string
+	store        *auth.Store
+	blacklist    *auth.Blacklist
+	wal          *walmanager.Manager
+	hotTier      *hotmanager.Manager
 	cold         *coldstore.Store
 	tierEngine   *coldstore.TieringEngine
 	adminHandler *adminpkg.Handler
@@ -47,14 +47,14 @@ func New(cfg *config.Config, version, buildTime, gitCommit string,
 	wal *walmanager.Manager, hotTier *hotmanager.Manager,
 	cold *coldstore.Store, tierEngine *coldstore.TieringEngine) *Server {
 	s := &Server{
-		router:    chi.NewRouter(),
-		cfg:       cfg,
-		startTime: time.Now(),
-		version:   version,
-		store:     store,
-		blacklist: blacklist,
-		wal:       wal,
-		hotTier:   hotTier,
+		router:     chi.NewRouter(),
+		cfg:        cfg,
+		startTime:  time.Now(),
+		version:    version,
+		store:      store,
+		blacklist:  blacklist,
+		wal:        wal,
+		hotTier:    hotTier,
 		cold:       cold,
 		tierEngine: tierEngine,
 		adminHandler: adminpkg.NewHandler(
@@ -152,7 +152,7 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/health", s.handleHealth)
 	s.router.Post("/auth/login", authHandler.Login)
 	s.router.Get("/openapi.json", s.handleOpenAPISpec)
-	s.router.Get("/docs",         s.handleDocs)
+	s.router.Get("/docs", s.handleDocs)
 
 	// Protected — auth required
 	s.router.Group(func(r chi.Router) {
@@ -172,15 +172,15 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Query — auth required
-	queryEngine  := query.NewEngine(s.hotTier, s.cold)
+	queryEngine := query.NewEngine(s.hotTier, s.cold)
 	queryHandler := query.NewHandler(queryEngine)
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
-		r.Get("/query/logs",            queryHandler.QueryLogs)
-		r.Get("/query/metrics",         queryHandler.QueryMetrics)
-		r.Get("/query/json",            queryHandler.QueryJSON)
-		r.Get("/query/kv/{key}",        queryHandler.QueryKV)
-		r.Get("/query/schema/{type}",   queryHandler.QuerySchema)
+		r.Get("/query/logs", queryHandler.QueryLogs)
+		r.Get("/query/metrics", queryHandler.QueryMetrics)
+		r.Get("/query/json", queryHandler.QueryJSON)
+		r.Get("/query/kv/{key}", queryHandler.QueryKV)
+		r.Get("/query/schema/{type}", queryHandler.QuerySchema)
 	})
 
 	// Admin only — auth + admin role
@@ -196,14 +196,31 @@ func (s *Server) setupRoutes() {
 		r.Delete("/admin/users/{id}/apikey", apiKeyHandler.Revoke)
 		r.Get("/admin/users/{id}/apikey/status", apiKeyHandler.Status)
 		r.Post("/admin/tier/flush", s.handleTierFlush)
-		r.Get("/admin/stats",            s.adminHandler.Stats)
-		r.Get("/admin/info",             s.adminHandler.Info)
-		r.Get("/admin/wal/stats",        s.adminHandler.WALStats)
-		r.Post("/admin/wal/rotate",      s.adminHandler.WALRotate)
-		r.Get("/admin/cold/stats",       s.adminHandler.ColdStats)
-		r.Get("/admin/schema",           s.adminHandler.SchemaList)
+		r.Get("/admin/stats", s.adminHandler.Stats)
+		r.Get("/admin/info", s.adminHandler.Info)
+		r.Get("/admin/wal/stats", s.adminHandler.WALStats)
+		r.Post("/admin/wal/rotate", s.adminHandler.WALRotate)
+		r.Get("/admin/cold/stats", s.adminHandler.ColdStats)
+		r.Get("/admin/schema", s.adminHandler.SchemaList)
 		r.Delete("/admin/schema/{type}", s.adminHandler.SchemaDelete)
 	})
+
+	// UI routes — served last so they cannot shadow API routes
+	if s.cfg.UI.Enabled {
+		if s.cfg.UI.DevMode {
+			uiProxy, err := newUIProxyHandler("http://localhost:3000")
+			if err != nil {
+				// misconfigured target URL — fail at startup, not at request time
+				panic(fmt.Sprintf("failed to create UI proxy handler: %v", err))
+			}
+			s.router.Handle("/app", uiProxy)
+			s.router.Handle("/app/*", uiProxy)
+		} else {
+			uiHandler := newSPAHandler("ui/dist")
+			s.router.Handle("/app", uiHandler)
+			s.router.Handle("/app/*", uiHandler)
+		}
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -272,8 +289,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // Auth: admin only
 //
 // Responses:
-//   200 OK       — flush complete, returns stats
-//   500 Internal — INTERNAL_ERROR: flush failed
+//
+//	200 OK       — flush complete, returns stats
+//	500 Internal — INTERNAL_ERROR: flush failed
 func (s *Server) handleTierFlush(w http.ResponseWriter, r *http.Request) {
 	if s.tierEngine == nil || s.cold == nil {
 		utils.InternalError(w, r, "tier engine not available")

@@ -96,6 +96,20 @@ curl http://localhost:8080/health
 
 ---
 
+## Web UI
+
+Plomvix includes a React-based web UI served from `/app/*`.
+
+```bash
+make ui-install   # install UI dependencies (first time only)
+make dev          # start Go + Vite together for development
+make build        # build both Go binary and React app for production
+```
+
+See [docs/ui.md](docs/ui.md) for details.
+
+---
+
 ## Make Commands
 
 | Command | Description |

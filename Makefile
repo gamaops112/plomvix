@@ -21,8 +21,8 @@ LDFLAGS       = -ldflags "$(LD_FLAGS_INNER)"
 run:
 	go run $(LDFLAGS) ./cmd/plomvix
 
-## build: Build the Plomvix binary with version injected
-build:
+## build: Build the Plomvix binary and the React UI
+build: ui-build
 	go build $(LDFLAGS) -o $(BINARY) ./cmd/plomvix
 
 ## test: Run all tests with race detector and coverage
@@ -54,6 +54,24 @@ coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report written to coverage.html"
+
+## ui-install: Install UI npm dependencies
+ui-install:
+	cd ui && npm install
+
+## ui-dev: Start Vite development server on port 3000
+ui-dev:
+	cd ui && npm run dev
+
+## ui-build: Build the React app into ui/dist/
+ui-build:
+	cd ui && npm run build
+
+## dev: Start Go server and Vite dev server together (development mode)
+dev:
+	cd ui && npx concurrently \
+		"PLOMVIX_UI_DEV_MODE=true go run $(LDFLAGS) ../cmd/plomvix" \
+		"npm run dev"
 
 ## help: Show available make commands
 help:
