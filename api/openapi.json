@@ -51,6 +51,10 @@
     {
       "name": "Docs",
       "description": "API documentation"
+    },
+    {
+      "name": "Theme",
+      "description": "UI theme configuration and design tokens"
     }
   ],
   "components": {
@@ -580,6 +584,94 @@
           "message": {
             "type": "string"
           }
+        }
+      },
+      "Theme": {
+        "type": "object",
+        "required": ["version", "dev_panel", "mode", "tokens"],
+        "properties": {
+          "version": { "type": "integer", "example": 1 },
+          "dev_panel": { "type": "boolean", "example": true },
+          "mode": { "type": "string", "enum": ["light", "dark"], "example": "light" },
+          "tokens": { "$ref": "#/components/schemas/ThemeTokens" }
+        }
+      },
+      "ThemeTokens": {
+        "type": "object",
+        "required": ["colors", "dark_colors", "typography", "radii", "spacing", "shadows", "layout"],
+        "properties": {
+          "colors": { "$ref": "#/components/schemas/ColorTokens" },
+          "dark_colors": { "$ref": "#/components/schemas/ColorTokens" },
+          "typography": { "$ref": "#/components/schemas/TypographyTokens" },
+          "radii": { "$ref": "#/components/schemas/ScaleTokens" },
+          "spacing": { "$ref": "#/components/schemas/ScaleTokens" },
+          "shadows": { "$ref": "#/components/schemas/ShadowTokens" },
+          "layout": { "$ref": "#/components/schemas/LayoutTokens" }
+        }
+      },
+      "ColorTokens": {
+        "type": "object",
+        "required": ["primary", "secondary", "accent", "background", "background_muted", "surface", "surface_muted", "text", "text_muted", "border", "error", "warning", "success", "info"],
+        "properties": {
+          "primary": { "type": "string", "example": "#2563eb" },
+          "secondary": { "type": "string", "example": "#64748b" },
+          "accent": { "type": "string", "example": "#14b8a6" },
+          "background": { "type": "string", "example": "#ffffff" },
+          "background_muted": { "type": "string", "example": "#f8fafc" },
+          "surface": { "type": "string", "example": "#ffffff" },
+          "surface_muted": { "type": "string", "example": "#f1f5f9" },
+          "text": { "type": "string", "example": "#0f172a" },
+          "text_muted": { "type": "string", "example": "#64748b" },
+          "border": { "type": "string", "example": "#e2e8f0" },
+          "error": { "type": "string", "example": "#dc2626" },
+          "warning": { "type": "string", "example": "#f59e0b" },
+          "success": { "type": "string", "example": "#16a34a" },
+          "info": { "type": "string", "example": "#0ea5e9" }
+        }
+      },
+      "TypographyTokens": {
+        "type": "object",
+        "required": ["font_family", "font_size_xs", "font_size_sm", "font_size_base", "font_size_lg", "font_size_xl", "font_weight_regular", "font_weight_medium", "font_weight_semibold", "font_weight_bold"],
+        "properties": {
+          "font_family": { "type": "string", "example": "Inter, ui-sans-serif, system-ui, sans-serif" },
+          "font_size_xs": { "type": "string", "example": "0.75rem" },
+          "font_size_sm": { "type": "string", "example": "0.875rem" },
+          "font_size_base": { "type": "string", "example": "1rem" },
+          "font_size_lg": { "type": "string", "example": "1.125rem" },
+          "font_size_xl": { "type": "string", "example": "1.25rem" },
+          "font_weight_regular": { "type": "string", "example": "400" },
+          "font_weight_medium": { "type": "string", "example": "500" },
+          "font_weight_semibold": { "type": "string", "example": "600" },
+          "font_weight_bold": { "type": "string", "example": "700" }
+        }
+      },
+      "ScaleTokens": {
+        "type": "object",
+        "required": ["xs", "sm", "md", "lg", "xl"],
+        "properties": {
+          "xs": { "type": "string", "example": "0.25rem" },
+          "sm": { "type": "string", "example": "0.5rem" },
+          "md": { "type": "string", "example": "1rem" },
+          "lg": { "type": "string", "example": "1.5rem" },
+          "xl": { "type": "string", "example": "2rem" }
+        }
+      },
+      "ShadowTokens": {
+        "type": "object",
+        "required": ["sm", "md", "lg"],
+        "properties": {
+          "sm": { "type": "string", "example": "0 1px 2px rgba(15, 23, 42, 0.08)" },
+          "md": { "type": "string", "example": "0 8px 20px rgba(15, 23, 42, 0.12)" },
+          "lg": { "type": "string", "example": "0 16px 40px rgba(15, 23, 42, 0.16)" }
+        }
+      },
+      "LayoutTokens": {
+        "type": "object",
+        "required": ["sidebar_width", "navbar_height", "transition_speed"],
+        "properties": {
+          "sidebar_width": { "type": "string", "example": "260px" },
+          "navbar_height": { "type": "string", "example": "56px" },
+          "transition_speed": { "type": "string", "example": "160ms" }
         }
       }
     }
@@ -1556,9 +1648,237 @@
                               "type": "array",
                               "items": {
                                 "$ref": "#/components/schemas/KVRecord"
-                              }
-                            }
-                          }
+      }
+    },
+    "/api/theme": {
+      "get": {
+        "tags": [
+          "Theme"
+        ],
+        "summary": "Get current theme",
+        "description": "Returns the active UI theme configuration including color tokens, typography, spacing, shadows, and layout settings.",
+        "operationId": "getTheme",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Current theme configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Theme"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Theme"
+        ],
+        "summary": "Save theme",
+        "description": "Save or update the UI theme configuration. Admin role required.",
+        "operationId": "saveTheme",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "APIKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Theme"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Theme saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Theme"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid theme configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — admin role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/theme/reset": {
+      "post": {
+        "tags": [
+          "Theme"
+        ],
+        "summary": "Reset theme to defaults",
+        "description": "Reset the UI theme configuration to built-in factory defaults. Admin role required.",
+        "operationId": "resetTheme",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "APIKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Theme reset to defaults",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Theme"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — admin role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/theme/export": {
+      "get": {
+        "tags": [
+          "Theme"
+        ],
+        "summary": "Export theme as JSON file",
+        "description": "Download the current theme configuration as a raw JSON file attachment. Admin role required.",
+        "operationId": "exportTheme",
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {
+            "APIKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Theme JSON file download",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — admin role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
                         }
                       }
                     }

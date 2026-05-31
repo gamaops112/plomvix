@@ -18,6 +18,7 @@ import (
 	"github.com/plomvix/plomvix/internal/ingestion"
 	"github.com/plomvix/plomvix/internal/logger"
 	"github.com/plomvix/plomvix/internal/query"
+	themestore "github.com/plomvix/plomvix/internal/theme"
 	"github.com/plomvix/plomvix/pkg/utils"
 
 	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
@@ -40,12 +41,14 @@ type Server struct {
 	cold         *coldstore.Store
 	tierEngine   *coldstore.TieringEngine
 	adminHandler *adminpkg.Handler
+	themeStore   *themestore.Store
 }
 
 func New(cfg *config.Config, version, buildTime, gitCommit string,
 	store *auth.Store, blacklist *auth.Blacklist,
 	wal *walmanager.Manager, hotTier *hotmanager.Manager,
-	cold *coldstore.Store, tierEngine *coldstore.TieringEngine) *Server {
+	cold *coldstore.Store, tierEngine *coldstore.TieringEngine,
+	themeStore *themestore.Store) *Server {
 	s := &Server{
 		router:     chi.NewRouter(),
 		cfg:        cfg,
@@ -62,6 +65,7 @@ func New(cfg *config.Config, version, buildTime, gitCommit string,
 			version, buildTime, gitCommit,
 			time.Now(),
 		),
+		themeStore: themeStore,
 	}
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -154,6 +158,9 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/openapi.json", s.handleOpenAPISpec)
 	s.router.Get("/docs", s.handleDocs)
 
+	themeHandler := themestore.NewHandler(s.themeStore)
+	s.router.Get("/api/theme", themeHandler.GetTheme)
+
 	// Protected — auth required
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
@@ -203,6 +210,15 @@ func (s *Server) setupRoutes() {
 		r.Get("/admin/cold/stats", s.adminHandler.ColdStats)
 		r.Get("/admin/schema", s.adminHandler.SchemaList)
 		r.Delete("/admin/schema/{type}", s.adminHandler.SchemaDelete)
+	})
+
+	// Theme mutation — admin only
+	s.router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
+		r.Use(auth.RequireAdmin())
+		r.Put("/api/theme", themeHandler.UpdateTheme)
+		r.Post("/api/theme/reset", themeHandler.ResetTheme)
+		r.Get("/api/theme/export", themeHandler.ExportTheme)
 	})
 
 	// UI routes — served last so they cannot shadow API routes

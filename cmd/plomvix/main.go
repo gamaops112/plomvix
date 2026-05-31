@@ -17,6 +17,7 @@ import (
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/internal/logger"
 	"github.com/plomvix/plomvix/internal/server"
+	themestore "github.com/plomvix/plomvix/internal/theme"
 	"github.com/plomvix/plomvix/pkg/utils"
 
 	hot "github.com/plomvix/plomvix/internal/storage/hot"
@@ -69,6 +70,17 @@ func main() {
 
 	if err := bootstrapDataDirs(cfg); err != nil {
 		logger.Error("failed to bootstrap data directories", zap.Error(err))
+		os.Exit(1)
+	}
+
+	// Initialize theme store
+	themePath := cfg.Theme.Path
+	if themePath == "" {
+		themePath = themestore.DefaultPath
+	}
+	themeStore := themestore.NewStore(themePath)
+	if _, err := themeStore.Load(); err != nil {
+		logger.Error("failed to load theme", zap.Error(err))
 		os.Exit(1)
 	}
 
@@ -155,7 +167,8 @@ func main() {
 	defer tierEngine.Stop()
 
 	srv := server.New(cfg, Version, BuildTime, GitCommit,
-		store, blacklist, wal, hotTier, coldTier, tierEngine)
+		store, blacklist, wal, hotTier, coldTier, tierEngine,
+		themeStore)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
