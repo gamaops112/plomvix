@@ -1,5 +1,5 @@
 #!/bin/bash
-# Plomvix Smoke Test — All Sprints (1–6)
+# Plomvix Smoke Test — All Sprints (1–9)
 # Run from project root: bash smoke_test.sh
 
 set -euo pipefail
@@ -24,7 +24,7 @@ pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 
 echo "================================================"
-echo " Plomvix Smoke Test — Sprints 1–6"
+echo " Plomvix Smoke Test — Sprints 1–9"
 echo " $(date)"
 echo "================================================"
 
@@ -79,7 +79,7 @@ set -e
 
 echo ""
 echo "Step 4: Boot server"
-./plomvix > /tmp/plomvix_smoke.log 2>&1 &
+PLOMVIX_STORAGE_RETENTION_DAYS=0 ./plomvix > /tmp/plomvix_smoke.log 2>&1 &
 SERVER_PID=$!
 sleep 3
 curl -sf http://localhost:8080/health > /dev/null && pass "health endpoint reachable" || fail "health endpoint unreachable"
@@ -170,83 +170,260 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     -d '{"records":[]}')
 [ "$STATUS" -eq 400 ] && pass "empty records → 400" || fail "empty records got $STATUS"
 
+# ── SPRINT 7: Cold Tier ──────────────────────────────────────────
+echo ""
+echo "── Sprint 7: Cold Tier ──"
+
+echo "Step 15: Health includes cold stats"
+HEALTH=$(curl -sf http://localhost:8080/health)
+echo "$HEALTH" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert 'cold' in d" 2>/dev/null \
+    && pass "cold block in health" || fail "cold block missing"
+
+echo ""
+echo "Step 16: Manual tier flush with retention_days=0"
+RESP=$(curl -sf -X POST http://localhost:8080/admin/tier/flush \
+    -H "Authorization: Bearer $TOKEN")
+MOVED=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['records_moved'])")
+FLUSH_FILES=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['parquet_files'])")
+[ "$MOVED" -ge 4 ] && pass "tier flush: $MOVED records moved" || fail "tier flush: $MOVED records moved"
+[ "$FLUSH_FILES" -ge 1 ] && pass "parquet files=$FLUSH_FILES" || fail "parquet files=$FLUSH_FILES"
+
+echo ""
+echo "Step 17: Query after cold tier flush (returns from cold tier)"
+RESP=$(curl -sf "http://localhost:8080/query/logs" -H "Authorization: Bearer $TOKEN")
+TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['total'])")
+[ "$TOTAL" -ge 4 ] && pass "query after flush total=$TOTAL" || fail "query after flush total=$TOTAL"
+
+echo ""
+echo "Step 18: Tier flush requires auth"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/admin/tier/flush)
+[ "$STATUS" -eq 401 ] && pass "tier flush no auth → 401" || fail "tier flush no auth got $STATUS"
+
+echo ""
+echo "Step 19: KV records are not tiered (still queryable after flush)"
+RESP=$(curl -sf "http://localhost:8080/query/kv/smoke:test:key" -H "Authorization: Bearer $TOKEN")
+COUNT=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['count'])")
+[ "$COUNT" -eq 1 ] && pass "KV still present after flush, count=1" || fail "KV after flush count=$COUNT"
+
+# ── SPRINT 8: Multi-Format Parsers ────────────────────────────────
+echo ""
+echo "── Sprint 8: Multi-Format Parsers ──"
+
+echo "Step 20: JSON bare array ingest"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/ingest/logs \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '[{"level":"info","message":"bare array test"}]')
+[ "$STATUS" -eq 201 ] && pass "JSON bare array → 201" || fail "JSON bare array got $STATUS"
+
+echo ""
+echo "Step 21: CSV ingest"
+RESP=$(curl -sf -X POST http://localhost:8080/ingest/logs \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: text/csv" \
+    --data-binary $'level,message,host\ninfo,started,web-01\nwarn,highmem,web-02')
+INGESTED=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['ingested'])")
+[ "$INGESTED" -eq 2 ] && pass "CSV ingested=$INGESTED" || fail "CSV ingested=$INGESTED"
+
+echo ""
+echo "Step 22: Logfmt ingest"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/ingest/logs \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: text/x-logfmt" \
+    --data-binary $'level=info msg="logfmt test" host=web-01')
+[ "$STATUS" -eq 201 ] && pass "Logfmt → 201" || fail "Logfmt got $STATUS"
+
+echo ""
+echo "Step 23: Syslog ingest"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/ingest/logs \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/x-syslog" \
+    --data-binary '<34>1 2024-01-15T10:30:00Z web-01 app 1 - - syslog test')
+[ "$STATUS" -eq 201 ] && pass "Syslog → 201" || fail "Syslog got $STATUS"
+
+echo ""
+echo "Step 24: Empty body → 400"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/ingest/logs \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '')
+[ "$STATUS" -eq 400 ] && pass "empty body → 400" || fail "empty body got $STATUS"
+
+echo ""
+echo "Step 25: Header-only CSV → 400"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/ingest/logs \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: text/csv" \
+    --data-binary $'level,message\n')
+[ "$STATUS" -eq 400 ] && pass "header-only CSV → 400" || fail "header-only CSV got $STATUS"
+
+echo ""
+echo "Step 26: Unsupported format on metrics → 400"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/ingest/metrics \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: text/csv" \
+    --data-binary $'name,value\ncpu,1')
+[ "$STATUS" -eq 400 ] && pass "CSV on metrics → 400" || fail "CSV on metrics got $STATUS"
+
+echo ""
+echo "Step 27: Query includes multi-format records"
+RESP=$(curl -sf "http://localhost:8080/query/logs" -H "Authorization: Bearer $TOKEN")
+TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['total'])")
+[ "$TOTAL" -ge 9 ] && pass "query total=$TOTAL (all formats)" || fail "query total=$TOTAL"
+
 # ── SPRINT 6: Query Engine ───────────────────────────────────────
 echo ""
 echo "── Sprint 6: Query Engine ──"
 
-echo "Step 15: GET /query/logs"
+echo "Step 28: GET /query/logs"
 RESP=$(curl -sf "http://localhost:8080/query/logs" -H "Authorization: Bearer $TOKEN")
 TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['total'])")
 [ "$TOTAL" -ge 4 ] && pass "total=$TOTAL (all ingested logs)" || fail "query logs total=$TOTAL"
 
 echo ""
-echo "Step 16: GET /query/logs with filter"
+echo "Step 29: GET /query/logs with filter"
 RESP=$(curl -sf "http://localhost:8080/query/logs?filter=level%3Dinfo" -H "Authorization: Bearer $TOKEN")
 TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['total'])")
 [ "$TOTAL" -ge 2 ] && pass "filter level=info → $TOTAL records" || fail "filter returned $TOTAL"
 
 echo ""
-echo "Step 17: Query metrics with numeric filter"
+echo "Step 30: Query metrics with numeric filter"
 RESP=$(curl -sf "http://localhost:8080/query/metrics?filter=value%3E50" -H "Authorization: Bearer $TOKEN")
 TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['total'])")
 [ "$TOTAL" -ge 1 ] && pass "numeric filter value>50 → $TOTAL" || fail "numeric filter returned $TOTAL"
 
 echo ""
-echo "Step 18: GET /query/metrics"
+echo "Step 31: GET /query/metrics"
 RESP=$(curl -sf "http://localhost:8080/query/metrics?name=cpu.usage" -H "Authorization: Bearer $TOKEN")
 TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['total'])")
 [ "$TOTAL" -ge 1 ] && pass "metrics name=cpu.usage → $TOTAL" || fail "metrics query returned $TOTAL"
 
 echo ""
-echo "Step 19: GET /query/kv/{key} — found"
+echo "Step 32: GET /query/kv/{key} — found"
 RESP=$(curl -sf "http://localhost:8080/query/kv/smoke:test:key" -H "Authorization: Bearer $TOKEN")
 COUNT=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['count'])")
 [ "$COUNT" -eq 1 ] && pass "KV found, count=1" || fail "KV found count=$COUNT"
 
 echo ""
-echo "Step 20: GET /query/kv/{key} — not found"
+echo "Step 33: GET /query/kv/{key} — not found"
 RESP=$(curl -sf "http://localhost:8080/query/kv/nonexistent" -H "Authorization: Bearer $TOKEN")
 COUNT=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['count'])")
 [ "$COUNT" -eq 0 ] && pass "KV not found, count=0" || fail "KV not found count=$COUNT"
 
 echo ""
-echo "Step 21: GET /query/schema/logs"
+echo "Step 34: GET /query/schema/logs"
 RESP=$(curl -sf "http://localhost:8080/query/schema/logs" -H "Authorization: Bearer $TOKEN")
 echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert 'level' in str(d.get('fields',{}))" 2>/dev/null \
     && pass "schema has level field" || fail "schema missing level field"
 
 echo ""
-echo "Step 22: GET /query/schema/metrics"
+echo "Step 35: GET /query/schema/metrics"
 RESP=$(curl -sf "http://localhost:8080/query/schema/metrics" -H "Authorization: Bearer $TOKEN")
 echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert 'name' in str(d.get('fields',{}))" 2>/dev/null \
     && pass "metrics schema has name field" || fail "metrics schema missing name"
 
 echo ""
-echo "Step 23: Invalid filter → 400"
+echo "Step 36: Invalid filter → 400"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     "http://localhost:8080/query/logs?filter=noop" \
     -H "Authorization: Bearer $TOKEN")
 [ "$STATUS" -eq 400 ] && pass "invalid filter → 400" || fail "invalid filter got $STATUS"
 
 echo ""
-echo "Step 24: Invalid schema type → 400"
+echo "Step 37: Invalid schema type → 400"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     "http://localhost:8080/query/schema/invalid" \
     -H "Authorization: Bearer $TOKEN")
 [ "$STATUS" -eq 400 ] && pass "invalid schema type → 400" || fail "invalid schema got $STATUS"
 
 echo ""
-echo "Step 25: Pagination — limit + offset"
+echo "Step 38: Pagination — limit + offset"
 RESP=$(curl -sf "http://localhost:8080/query/logs?limit=2&offset=1" -H "Authorization: Bearer $TOKEN")
 COUNT=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; print(d['count'])")
 TOTAL=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; print(d['total'])")
 [ "$COUNT" -le 2 ] && [ "$TOTAL" -ge 2 ] && pass "limit=2 offset=1 → count=$COUNT" || fail "pagination count=$COUNT total=$TOTAL"
 
+# ── SPRINT 9: Admin APIs & Docs ──────────────────────────────────
+echo ""
+echo "── Sprint 9: Admin APIs & Docs ──"
+
+echo "Step 39: /openapi.json is public"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/openapi.json)
+[ "$STATUS" -eq 200 ] && pass "/openapi.json → 200" || fail "/openapi.json → $STATUS"
+
+echo ""
+echo "Step 40: /openapi.json is valid JSON"
+curl -sf http://localhost:8080/openapi.json | python3 -m json.tool > /dev/null \
+    && pass "spec is valid JSON" || fail "spec is not valid JSON"
+
+echo ""
+echo "Step 41: /docs is public"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/docs)
+[ "$STATUS" -eq 200 ] && pass "/docs → 200" || fail "/docs → $STATUS"
+
+echo ""
+echo "Step 42: /docs contains Stoplight Elements"
+curl -sf http://localhost:8080/docs | grep -q "elements-api" \
+    && pass "docs page has <elements-api>" || fail "docs page missing <elements-api>"
+
+echo ""
+echo "Step 43: GET /admin/stats"
+RESP=$(curl -sf http://localhost:8080/admin/stats \
+    -H "Authorization: Bearer $TOKEN")
+echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert 'wal' in d; assert 'runtime' in d" 2>/dev/null \
+    && pass "/admin/stats returns wal/runtime blocks" || fail "/admin/stats missing blocks"
+
+echo ""
+echo "Step 44: GET /admin/info"
+RESP=$(curl -sf http://localhost:8080/admin/info \
+    -H "Authorization: Bearer $TOKEN")
+echo "$RESP" | python3 -c "import sys,json; v=json.load(sys.stdin)['data']['version']; assert v is not None" 2>/dev/null \
+    && pass "/admin/info returns version" || fail "/admin/info missing version"
+
+echo ""
+echo "Step 45: POST /admin/wal/rotate"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/admin/wal/rotate \
+    -H "Authorization: Bearer $TOKEN")
+[ "$STATUS" -eq 200 ] && pass "/admin/wal/rotate → 200" || fail "/admin/wal/rotate → $STATUS"
+
+echo ""
+echo "Step 46: GET /admin/schema"
+RESP=$(curl -sf http://localhost:8080/admin/schema \
+    -H "Authorization: Bearer $TOKEN")
+echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; assert 'logs' in d" 2>/dev/null \
+    && pass "/admin/schema lists data types" || fail "/admin/schema missing logs"
+
+echo ""
+echo "Step 47: DELETE /admin/schema/logs"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X DELETE http://localhost:8080/admin/schema/logs \
+    -H "Authorization: Bearer $TOKEN")
+[ "$STATUS" -eq 200 ] && pass "/admin/schema/logs DELETE → 200" || fail "/admin/schema/logs DELETE → $STATUS"
+
+echo ""
+echo "Step 48: DELETE /admin/schema/unknown → 400"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X DELETE http://localhost:8080/admin/schema/unknown \
+    -H "Authorization: Bearer $TOKEN")
+[ "$STATUS" -eq 400 ] && pass "/admin/schema/unknown DELETE → 400" || fail "/admin/schema/unknown DELETE → $STATUS"
+
+echo ""
+echo "Step 49: Admin endpoints require auth"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/admin/stats)
+[ "$STATUS" -eq 401 ] && pass "no auth → 401" || fail "no auth got $STATUS"
+
 # ── Health Stats ──────────────────────────────────────────────────
 echo ""
 echo "── Health & Stats ──"
 
-echo "Step 26: Health shows total_data_writes > 0"
+echo "Step 50: Health shows total_data_writes > 0"
 HEALTH=$(curl -sf http://localhost:8080/health)
 TOTAL_WRITES=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['hot']['total_data_writes'])")
 WAL_ENTRIES=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['wal']['total_entries'])")
@@ -257,7 +434,7 @@ echo "  WAL entries: $WAL_ENTRIES | Hot writes: $TOTAL_WRITES"
 echo ""
 echo "── Shutdown ──"
 
-echo "Step 27: Graceful shutdown"
+echo "Step 51: Graceful shutdown"
 kill -SIGTERM "$SERVER_PID"
 wait "$SERVER_PID" 2>/dev/null
 SHUTDOWN_CODE=$?
@@ -268,7 +445,7 @@ SERVER_PID=""
 echo ""
 echo "── Test Suite ──"
 
-echo "Step 28: Run all tests"
+echo "Step 52: Run all tests"
 make test 2>&1 | grep -E "^(ok|FAIL|---)" || true
 make test > /dev/null 2>&1 && pass "all tests pass" || fail "test failures"
 

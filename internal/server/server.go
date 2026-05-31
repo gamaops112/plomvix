@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
+	adminpkg "github.com/plomvix/plomvix/internal/admin"
 	"github.com/plomvix/plomvix/internal/auth"
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/internal/ingestion"
@@ -36,14 +37,15 @@ type Server struct {
 	blacklist  *auth.Blacklist
 	wal        *walmanager.Manager
 	hotTier    *hotmanager.Manager
-	cold       *coldstore.Store
-	tierEngine *coldstore.TieringEngine
+	cold         *coldstore.Store
+	tierEngine   *coldstore.TieringEngine
+	adminHandler *adminpkg.Handler
 }
 
-func New(cfg *config.Config, version string, store *auth.Store,
-	blacklist *auth.Blacklist, wal *walmanager.Manager,
-	hotTier *hotmanager.Manager, cold *coldstore.Store,
-	tierEngine *coldstore.TieringEngine) *Server {
+func New(cfg *config.Config, version, buildTime, gitCommit string,
+	store *auth.Store, blacklist *auth.Blacklist,
+	wal *walmanager.Manager, hotTier *hotmanager.Manager,
+	cold *coldstore.Store, tierEngine *coldstore.TieringEngine) *Server {
 	s := &Server{
 		router:    chi.NewRouter(),
 		cfg:       cfg,
@@ -55,6 +57,11 @@ func New(cfg *config.Config, version string, store *auth.Store,
 		hotTier:   hotTier,
 		cold:       cold,
 		tierEngine: tierEngine,
+		adminHandler: adminpkg.NewHandler(
+			wal, hotTier, cold,
+			version, buildTime, gitCommit,
+			time.Now(),
+		),
 	}
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -131,6 +138,8 @@ func (s *Server) setupRoutes() {
 	// Public — no auth
 	s.router.Get("/health", s.handleHealth)
 	s.router.Post("/auth/login", authHandler.Login)
+	s.router.Get("/openapi.json", s.handleOpenAPISpec)
+	s.router.Get("/docs",         s.handleDocs)
 
 	// Protected — auth required
 	s.router.Group(func(r chi.Router) {
@@ -174,6 +183,13 @@ func (s *Server) setupRoutes() {
 		r.Delete("/admin/users/{id}/apikey", apiKeyHandler.Revoke)
 		r.Get("/admin/users/{id}/apikey/status", apiKeyHandler.Status)
 		r.Post("/admin/tier/flush", s.handleTierFlush)
+		r.Get("/admin/stats",            s.adminHandler.Stats)
+		r.Get("/admin/info",             s.adminHandler.Info)
+		r.Get("/admin/wal/stats",        s.adminHandler.WALStats)
+		r.Post("/admin/wal/rotate",      s.adminHandler.WALRotate)
+		r.Get("/admin/cold/stats",       s.adminHandler.ColdStats)
+		r.Get("/admin/schema",           s.adminHandler.SchemaList)
+		r.Delete("/admin/schema/{type}", s.adminHandler.SchemaDelete)
 	})
 }
 
@@ -262,4 +278,48 @@ func (s *Server) handleTierFlush(w http.ResponseWriter, r *http.Request) {
 		"last_flush_at":  stats.LastFlushAt,
 		"flush_duration": stats.LastFlushDuration.String(),
 	})
+}
+
+// handleOpenAPISpec serves the OpenAPI 3.0 JSON specification.
+//
+// GET /openapi.json
+// Auth: none (public)
+func (s *Server) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	http.ServeFile(w, r, "api/openapi.json")
+}
+
+// docsHTML is the Stoplight Elements API documentation page.
+// Elements is loaded via CDN — no build step required.
+const docsHTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plomvix API Docs</title>
+  <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    elements-api { display: block; height: 100%; }
+  </style>
+</head>
+<body>
+  <elements-api
+    apiDescriptionUrl="/openapi.json"
+    router="hash"
+    layout="sidebar"
+  />
+</body>
+</html>`
+
+// handleDocs serves the Stoplight Elements interactive API documentation UI.
+//
+// GET /docs
+// Auth: none (public)
+func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(docsHTML))
 }

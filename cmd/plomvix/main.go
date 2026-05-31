@@ -154,7 +154,8 @@ func main() {
 	tierEngine.Start()
 	defer tierEngine.Stop()
 
-	srv := server.New(cfg, Version, store, blacklist, wal, hotTier, coldTier, tierEngine)
+	srv := server.New(cfg, Version, BuildTime, GitCommit,
+		store, blacklist, wal, hotTier, coldTier, tierEngine)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

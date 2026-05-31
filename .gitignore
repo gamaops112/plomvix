@@ -44,6 +44,3 @@ Thumbs.db
 
 # RocksDB local install (dev dependency)
 .rocksdb/
-
-# Test scripts
-smoke_test.sh
