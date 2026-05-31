@@ -285,9 +285,16 @@ func (s *Server) handleTierFlush(w http.ResponseWriter, r *http.Request) {
 // GET /openapi.json
 // Auth: none (public)
 func (s *Server) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	spec, err := os.ReadFile("api/openapi.json")
+	if err != nil {
+		utils.InternalError(w, r, "openapi spec not available")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	http.ServeFile(w, r, "api/openapi.json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(spec)
 }
 
 // docsHTML is the Stoplight Elements API documentation page.
@@ -298,11 +305,13 @@ const docsHTML = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plomvix API Docs</title>
-  <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
+  <script src="https://unpkg.com/@stoplight/elements@9.0.21/web-components.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements@9.0.21/styles.min.css">
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     elements-api { display: block; height: 100%; }
+    #fallback { display: none; padding: 2rem; font-family: system-ui, sans-serif; }
+    #fallback a { color: #2563eb; }
   </style>
 </head>
 <body>
@@ -311,6 +320,23 @@ const docsHTML = `<!doctype html>
     router="hash"
     layout="sidebar"
   />
+  <div id="fallback">
+    <h2>API Documentation</h2>
+    <p>The interactive API docs require JavaScript from a CDN.</p>
+    <p>If you see this message, check your network connection or try:</p>
+    <ul>
+      <li>Disabling ad blockers / tracking protection for this page</li>
+      <li>Ensuring <code>unpkg.com</code> is reachable from your network</li>
+      <li>Downloading the raw <a href="/openapi.json">OpenAPI spec</a></li>
+    </ul>
+  </div>
+  <script>
+    setTimeout(function() {
+      if (!document.querySelector('elements-api') || !customElements.get('elements-api')) {
+        document.getElementById('fallback').style.display = 'block';
+      }
+    }, 3000);
+  </script>
 </body>
 </html>`
 
