@@ -1,5 +1,15 @@
 .PHONY: run build test test-verbose vet lint tidy clean coverage help
 
+CGO_ENABLED  ?= 1
+export CGO_ENABLED
+
+ROCKSDB_LOCAL  ?= $(PWD)/.rocksdb
+ROCKSDB_LIBDIR  = $(ROCKSDB_LOCAL)/usr/lib/x86_64-linux-gnu
+C_INCLUDE_PATH  ?= $(ROCKSDB_LOCAL)/usr/include
+CGO_LDFLAGS     ?= -L$(ROCKSDB_LIBDIR) -lrocksdb -lgflags -lstdc++ -lm -lz -lsnappy -llz4 -lzstd -lbz2 -Wl,-rpath,$(ROCKSDB_LIBDIR)
+export C_INCLUDE_PATH
+export CGO_LDFLAGS
+
 VERSION      ?= 0.1.0
 BINARY        = plomvix
 BUILD_TIME   := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
