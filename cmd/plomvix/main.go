@@ -19,7 +19,10 @@ import (
 	"github.com/plomvix/plomvix/internal/server"
 	"github.com/plomvix/plomvix/pkg/utils"
 
+	hot "github.com/plomvix/plomvix/internal/storage/hot"
 	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
+
+	coldstore "github.com/plomvix/plomvix/internal/storage/cold"
 )
 
 var (
@@ -112,7 +115,47 @@ func main() {
 	)
 	_ = entries // suppress unused variable warning
 
-	srv := server.New(cfg, Version, store, blacklist, wal)
+	// Open hot tier
+	hotPath := filepath.Join(cfg.Storage.DataDir, "hot")
+	hotTier, err := hot.Open(hotPath, cfg)
+	if err != nil {
+		wal.Close()
+		logger.Error("failed to open hot tier", zap.Error(err))
+		os.Exit(1)
+	}
+	defer hotTier.Close()
+
+	// Replay WAL entries into hot tier
+	replayCount, err := hotTier.ReplayWAL(entries)
+	if err != nil {
+		hotTier.Close()
+		wal.Close()
+		logger.Error("WAL replay into hot tier failed", zap.Error(err))
+		os.Exit(1)
+	}
+	logger.Info("hot tier ready",
+		zap.Int("wal_entries_replayed", replayCount),
+		zap.String("path", hotPath),
+	)
+
+	// Open cold tier store
+	coldPath := filepath.Join(cfg.Storage.DataDir, "cold")
+	coldTier, err := coldstore.NewStore(coldPath)
+	if err != nil {
+		hotTier.Close()
+		wal.Close()
+		logger.Error("failed to open cold tier", zap.Error(err))
+		os.Exit(1)
+	}
+	// coldTier holds no file handles — no defer needed
+
+	// Create and start tiering engine
+	tierEngine := coldstore.NewTieringEngine(hotTier, coldTier, cfg)
+	tierEngine.Start()
+	defer tierEngine.Stop()
+
+	srv := server.New(cfg, Version, BuildTime, GitCommit,
+		store, blacklist, wal, hotTier, coldTier, tierEngine)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

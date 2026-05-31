@@ -16,6 +16,7 @@ type Config struct {
 	Indexing    IndexingConfig    `mapstructure:"indexing"`
 	Auth        AuthConfig        `mapstructure:"auth"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
+	UI          UIConfig          `mapstructure:"ui"`
 }
 
 type ServerConfig struct {
@@ -53,6 +54,12 @@ type AuthConfig struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+// UIConfig holds configuration for the web UI.
+type UIConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+	DevMode bool `mapstructure:"dev_mode"`
 }
 
 var (
@@ -132,8 +139,8 @@ func validate(c *Config) error {
 	if c.Storage.HotTierMaxSize <= 0 {
 		errs = append(errs, "storage.hot_tier_max_size must be greater than 0")
 	}
-	if c.Storage.RetentionDays <= 0 {
-		errs = append(errs, "storage.retention_days must be greater than 0")
+	if c.Storage.RetentionDays < 0 {
+		errs = append(errs, "storage.retention_days must not be negative")
 	}
 
 	validHot := map[string]bool{"snappy": true, "lz4": true, "none": true}
@@ -175,6 +182,8 @@ func validate(c *Config) error {
 	if !validFormats[c.Logging.Format] {
 		errs = append(errs, fmt.Sprintf(`logging.format must be one of [json pretty], got: %q`, c.Logging.Format))
 	}
+
+	// UI config — no validation needed, booleans default to false safely
 
 	if len(errs) > 0 {
 		return fmt.Errorf("plomvix config validation failed:\n  - %s", strings.Join(errs, "\n  - "))
