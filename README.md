@@ -110,6 +110,21 @@ See [docs/ui.md](docs/ui.md) for details.
 
 ---
 
+## Theme Engine
+
+Plomvix includes a design-token theme engine backed by `theme.json`.
+
+- **Light/dark mode** — toggle from the UI header
+- **Developer Design Panel** — accessible at `/dev/design` when `dev_panel` is `true` in `theme.json`
+- **Live CSS variable injection** — tokens map to `--plx-*` CSS custom properties
+- **Admin APIs** — `PUT /api/theme`, `POST /api/theme/reset`, `GET /api/theme/export`
+
+See [docs/api/theme.md](docs/api/theme.md) for the full theme API reference.
+
+To disable the design panel in production, set `"dev_panel": false` in `theme.json`.
+
+---
+
 ## Make Commands
 
 | Command | Description |

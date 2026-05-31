@@ -17,6 +17,7 @@ type Config struct {
 	Auth        AuthConfig        `mapstructure:"auth"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
 	UI          UIConfig          `mapstructure:"ui"`
+	Theme       ThemeConfig       `mapstructure:"theme"`
 }
 
 type ServerConfig struct {
@@ -60,6 +61,11 @@ type LoggingConfig struct {
 type UIConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 	DevMode bool `mapstructure:"dev_mode"`
+}
+
+// ThemeConfig controls the file-backed theme engine.
+type ThemeConfig struct {
+	Path string `mapstructure:"path"`
 }
 
 var (
@@ -184,6 +190,10 @@ func validate(c *Config) error {
 	}
 
 	// UI config — no validation needed, booleans default to false safely
+
+	if c.Theme.Path == "" {
+		errs = append(errs, "theme.path must not be empty")
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("plomvix config validation failed:\n  - %s", strings.Join(errs, "\n  - "))

@@ -38,3 +38,6 @@ logging:
 ui:
   enabled: true        # Set to false to disable the web UI entirely
   dev_mode: false      # Set to true in development to proxy /app/* to Vite on port 3000
+
+theme:
+  path: ./theme.json
