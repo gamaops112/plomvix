@@ -8,6 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/linxGnu/grocksdb v1.8.12
+	github.com/parquet-go/parquet-go v0.30.1
 	github.com/spf13/viper v1.21.0
 	go.etcd.io/bbolt v1.4.3
 	go.uber.org/zap v1.28.0
@@ -21,7 +22,6 @@ require (
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.0.0 // indirect
-	github.com/parquet-go/parquet-go v0.30.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
