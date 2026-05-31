@@ -94,6 +94,19 @@ func (s *Server) Router() *chi.Mux {
 func (s *Server) setupMiddleware() {
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	s.router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestID := utils.NewRequestID()
 			r.Header.Set("X-Request-ID", requestID)
 			w.Header().Set("X-Request-ID", requestID)
@@ -285,9 +298,15 @@ func (s *Server) handleTierFlush(w http.ResponseWriter, r *http.Request) {
 // GET /openapi.json
 // Auth: none (public)
 func (s *Server) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	spec, err := os.ReadFile("api/openapi.json")
+	if err != nil {
+		utils.InternalError(w, r, "openapi spec not available")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	http.ServeFile(w, r, "api/openapi.json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(spec)
 }
 
 // docsHTML is the Stoplight Elements API documentation page.
@@ -298,19 +317,38 @@ const docsHTML = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plomvix API Docs</title>
-  <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
+  <script src="https://unpkg.com/@stoplight/elements@7.16.6/web-components.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements@7.16.6/styles.min.css">
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     elements-api { display: block; height: 100%; }
+    #fallback { display: none; padding: 2rem; font-family: system-ui, sans-serif; }
+    #fallback a { color: #2563eb; }
   </style>
 </head>
 <body>
-  <elements-api
-    apiDescriptionUrl="/openapi.json"
-    router="hash"
-    layout="sidebar"
-  />
+  <elements-api id="api" router="hash" layout="sidebar"></elements-api>
+  <div id="fallback">
+    <h2>API Documentation</h2>
+    <p>Could not load the OpenAPI specification.</p>
+    <p>Try:</p>
+    <ul>
+      <li>Disabling ad blockers / tracking protection for this page</li>
+      <li>Ensuring <code>unpkg.com</code> is reachable from your network</li>
+      <li>Downloading the raw <a href="/openapi.json">OpenAPI spec</a></li>
+    </ul>
+  </div>
+  <script>
+    fetch('/openapi.json')
+      .then(function(r) { return r.json(); })
+      .then(function(spec) {
+        var el = document.getElementById('api');
+        if (el) el.apiDescriptionDocument = spec;
+      })
+      .catch(function() {
+        document.getElementById('fallback').style.display = 'block';
+      });
+  </script>
 </body>
 </html>`
 
