@@ -2,9 +2,12 @@ package query
 
 import (
 	"encoding/json"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/plomvix/plomvix/internal/ingestion"
+	"github.com/plomvix/plomvix/internal/storage/cold"
 	"github.com/plomvix/plomvix/internal/storage/hot"
 )
 
@@ -18,14 +21,15 @@ func DecodePayload(raw []byte) map[string]interface{} {
 	return m
 }
 
-// Engine executes queries against the hot tier.
+// Engine executes queries against hot and cold tiers.
 type Engine struct {
 	store *hot.Manager
+	cold  *cold.Store // nil = cold tier not available
 }
 
-// NewEngine creates a new query Engine.
-func NewEngine(store *hot.Manager) *Engine {
-	return &Engine{store: store}
+// NewEngine creates a query Engine. cold may be nil for backward compatibility.
+func NewEngine(store *hot.Manager, cold *cold.Store) *Engine {
+	return &Engine{store: store, cold: cold}
 }
 
 // QueryLogs scans the logs column family and returns matching records.
@@ -87,27 +91,45 @@ func (e *Engine) QuerySchema(dataType string) (*ingestion.Schema, error) {
 // queryTimeSeries is the shared implementation for logs, json, and metrics queries.
 func (e *Engine) queryTimeSeries(cf, dataType string, params *QueryParams) (*QueryResult, error) {
 	start := time.Now()
-
-	// Collect all matching records
 	var all []map[string]interface{}
 
+	// Hot tier scan
 	err := e.store.ScanCF(cf, params.FromNs, params.ToNs, func(raw []byte) bool {
 		record := DecodePayload(raw)
 		if record == nil {
-			return true // skip unparseable records, continue scanning
+			return true
 		}
 		if ApplyFilters(record, params.Filters) {
 			all = append(all, record)
 		}
-		return true // always continue scanning — collect all matching
+		return true
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hot tier scan failed: %w", err)
 	}
 
-	total := len(all)
+	// Cold tier scan — only for tierable types (not kv)
+	if e.cold != nil && cold.IsTierableDataType(dataType) {
+		coldRows, err := e.cold.ScanRows(dataType, params.FromNs, params.ToNs)
+		if err != nil {
+			return nil, fmt.Errorf("cold tier scan failed: %w", err)
+		}
+		for _, row := range coldRows {
+			record := DecodePayload([]byte(row.Payload))
+			if record == nil {
+				continue
+			}
+			if ApplyFilters(record, params.Filters) {
+				all = append(all, record)
+			}
+		}
+	}
 
-	// Apply pagination
+	// Sort by TimestampNs from the ParquetRow / ingestion Timestamp field.
+	// Records are sorted by "timestamp" JSON field which all ingest handlers set.
+	sortByTimestamp(all)
+
+	total := len(all)
 	start2 := params.Offset
 	if start2 > total {
 		start2 = total
@@ -130,4 +152,20 @@ func (e *Engine) queryTimeSeries(cf, dataType string, params *QueryParams) (*Que
 		QueryMs:  time.Since(start).Milliseconds(),
 		DataType: dataType,
 	}, nil
+}
+
+// sortByTimestamp sorts records by the "timestamp" JSON field (set by ingest handlers).
+// Records without a numeric "timestamp" field sort to the end.
+func sortByTimestamp(records []map[string]interface{}) {
+	sort.SliceStable(records, func(i, j int) bool {
+		ti, iok := records[i]["timestamp"].(float64)
+		tj, jok := records[j]["timestamp"].(float64)
+		if !iok {
+			return false
+		}
+		if !jok {
+			return true
+		}
+		return ti < tj
+	})
 }

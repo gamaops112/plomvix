@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/plomvix/plomvix/internal/config"
+	"github.com/plomvix/plomvix/internal/storage/cold"
 	"github.com/plomvix/plomvix/internal/storage/hot"
 )
 
@@ -20,7 +21,7 @@ func newTestEngine(t *testing.T) *Engine {
 		t.Fatalf("hot.Open failed: %v", err)
 	}
 	t.Cleanup(func() { m.Close() })
-	return NewEngine(m)
+	return NewEngine(m, nil)
 }
 
 func TestQueryLogsEmpty(t *testing.T) {
@@ -142,5 +143,84 @@ func TestQueryKVNotFound(t *testing.T) {
 	}
 	if len(result.Records) != 0 {
 		t.Errorf("records len = %d, want 0", len(result.Records))
+	}
+}
+
+func newTestEngineWithCold(t *testing.T) (*Engine, *hot.Manager) {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := &config.Config{Storage: config.StorageConfig{DataDir: dir}}
+
+	hotDir := filepath.Join(dir, "hot")
+	m, err := hot.Open(hotDir, cfg)
+	if err != nil {
+		t.Fatalf("hot.Open failed: %v", err)
+	}
+	t.Cleanup(func() { m.Close() })
+
+	coldDir := filepath.Join(dir, "cold")
+	cs, err := cold.NewStore(coldDir)
+	if err != nil {
+		t.Fatalf("cold.NewStore failed: %v", err)
+	}
+
+	return NewEngine(m, cs), m
+}
+
+func TestQueryLogsHotAndCold(t *testing.T) {
+	e, hotMgr := newTestEngineWithCold(t)
+	base := time.Now().UnixNano()
+
+	// Write 1 record to hot tier directly
+	hotMgr.WriteLog(base, []byte(`{"level":"info","message":"hot record","timestamp":1}`))
+
+	// Write 1 record to cold tier directly via engine's cold store
+	e.cold.WriteRows(cold.DataTypeLogs, []cold.ParquetRow{
+		{TimestampNs: base - 1000, Payload: `{"level":"warn","message":"cold record","timestamp":0}`},
+	}, time.Now())
+
+	params := &QueryParams{
+		FromNs: base - 2000,
+		ToNs:   base + 1000,
+		Limit:  DefaultLimit,
+	}
+	result, err := e.QueryLogs(params)
+	if err != nil {
+		t.Fatalf("QueryLogs failed: %v", err)
+	}
+	if result.Total != 2 {
+		t.Errorf("total = %d, want 2 (1 hot + 1 cold)", result.Total)
+	}
+}
+
+func TestQueryLogsColdOnly(t *testing.T) {
+	e, _ := newTestEngineWithCold(t)
+	base := time.Now().UnixNano()
+
+	// Only cold tier has data
+	e.cold.WriteRows(cold.DataTypeLogs, []cold.ParquetRow{
+		{TimestampNs: base, Payload: `{"level":"info","message":"cold only","timestamp":1}`},
+	}, time.Now())
+
+	params := &QueryParams{FromNs: base - 1, ToNs: base + 1, Limit: DefaultLimit}
+	result, err := e.QueryLogs(params)
+	if err != nil {
+		t.Fatalf("QueryLogs failed: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("total = %d, want 1", result.Total)
+	}
+}
+
+func TestQueryLogsNilCold(t *testing.T) {
+	// Engine with nil cold store should not panic and return only hot results
+	e := newTestEngine(t) // uses nil cold
+	params := &QueryParams{ToNs: time.Now().UnixNano(), Limit: DefaultLimit}
+	result, err := e.QueryLogs(params)
+	if err != nil {
+		t.Fatalf("QueryLogs with nil cold failed: %v", err)
+	}
+	if result == nil {
+		t.Error("result should not be nil")
 	}
 }
