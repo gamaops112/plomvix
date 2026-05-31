@@ -22,6 +22,8 @@ import (
 	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
 
 	hotmanager "github.com/plomvix/plomvix/internal/storage/hot"
+
+	coldstore "github.com/plomvix/plomvix/internal/storage/cold"
 )
 
 type Server struct {
@@ -34,11 +36,14 @@ type Server struct {
 	blacklist  *auth.Blacklist
 	wal        *walmanager.Manager
 	hotTier    *hotmanager.Manager
+	cold       *coldstore.Store
+	tierEngine *coldstore.TieringEngine
 }
 
 func New(cfg *config.Config, version string, store *auth.Store,
 	blacklist *auth.Blacklist, wal *walmanager.Manager,
-	hotTier *hotmanager.Manager) *Server {
+	hotTier *hotmanager.Manager, cold *coldstore.Store,
+	tierEngine *coldstore.TieringEngine) *Server {
 	s := &Server{
 		router:    chi.NewRouter(),
 		cfg:       cfg,
@@ -48,6 +53,8 @@ func New(cfg *config.Config, version string, store *auth.Store,
 		blacklist: blacklist,
 		wal:       wal,
 		hotTier:   hotTier,
+		cold:       cold,
+		tierEngine: tierEngine,
 	}
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -143,7 +150,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Query — auth required
-	queryEngine  := query.NewEngine(s.hotTier)
+	queryEngine  := query.NewEngine(s.hotTier, s.cold)
 	queryHandler := query.NewHandler(queryEngine)
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
@@ -166,6 +173,7 @@ func (s *Server) setupRoutes() {
 		r.Post("/admin/users/{id}/apikey", apiKeyHandler.Generate)
 		r.Delete("/admin/users/{id}/apikey", apiKeyHandler.Revoke)
 		r.Get("/admin/users/{id}/apikey/status", apiKeyHandler.Status)
+		r.Post("/admin/tier/flush", s.handleTierFlush)
 	})
 }
 
@@ -198,6 +206,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	walStats := s.wal.Stats()
 	hotStats := s.hotTier.Stats()
+	var coldData map[string]interface{}
+	if s.cold != nil {
+		cs := s.cold.Stats()
+		coldData = map[string]interface{}{
+			"parquet_files": cs.TotalParquetFiles,
+			"records_moved": cs.TotalRecordsMoved,
+			"last_flush_at": cs.LastFlushAt,
+		}
+	}
 	utils.OK(w, r, map[string]interface{}{
 		"version":        s.version,
 		"env":            s.cfg.Env,
@@ -216,5 +233,33 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			"total_data_writes": hotStats.TotalDataWrites,
 			"data_dir":          hotStats.DataDir,
 		},
+		"cold": coldData,
+	})
+}
+
+// handleTierFlush handles POST /admin/tier/flush.
+//
+// POST /admin/tier/flush
+// Auth: admin only
+//
+// Responses:
+//   200 OK       — flush complete, returns stats
+//   500 Internal — INTERNAL_ERROR: flush failed
+func (s *Server) handleTierFlush(w http.ResponseWriter, r *http.Request) {
+	if s.tierEngine == nil || s.cold == nil {
+		utils.InternalError(w, r, "tier engine not available")
+		return
+	}
+	if err := s.tierEngine.Flush(); err != nil {
+		utils.InternalError(w, r, "tier flush failed")
+		return
+	}
+	stats := s.cold.Stats()
+	utils.OK(w, r, map[string]interface{}{
+		"message":        "tier flush complete",
+		"records_moved":  stats.TotalRecordsMoved,
+		"parquet_files":  stats.TotalParquetFiles,
+		"last_flush_at":  stats.LastFlushAt,
+		"flush_duration": stats.LastFlushDuration.String(),
 	})
 }

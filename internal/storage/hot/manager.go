@@ -160,6 +160,27 @@ func (m *Manager) ScanCF(cf string, fromNs, toNs int64, fn func(payload []byte) 
 	})
 }
 
+// ScanCFWithKeys iterates a CF in [fromNs, toNs) and calls fn with key and value.
+// fromNs=0 scans from beginning. toNs=0 scans to current time.
+func (m *Manager) ScanCFWithKeys(cf string, fromNs, toNs int64, fn func(key, payload []byte) bool) error {
+	if toNs == 0 {
+		toNs = time.Now().UnixNano()
+	}
+	return m.store.Scan(cf, BuildRangeScanPrefix(fromNs), func(key, value []byte) bool {
+		if toNs > 0 && len(key) >= 8 {
+			if int64(binary.BigEndian.Uint64(key[:8])) >= toNs {
+				return false
+			}
+		}
+		return fn(key, value)
+	})
+}
+
+// DeleteFromCF deletes a record by exact key from the given column family.
+func (m *Manager) DeleteFromCF(cf string, key []byte) error {
+	return m.store.Delete(cf, key)
+}
+
 func (m *Manager) Close() {
 	m.store.Close()
 }

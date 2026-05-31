@@ -21,6 +21,8 @@ import (
 
 	hot "github.com/plomvix/plomvix/internal/storage/hot"
 	walmanager "github.com/plomvix/plomvix/internal/storage/wal"
+
+	coldstore "github.com/plomvix/plomvix/internal/storage/cold"
 )
 
 var (
@@ -136,7 +138,23 @@ func main() {
 		zap.String("path", hotPath),
 	)
 
-	srv := server.New(cfg, Version, store, blacklist, wal, hotTier)
+	// Open cold tier store
+	coldPath := filepath.Join(cfg.Storage.DataDir, "cold")
+	coldTier, err := coldstore.NewStore(coldPath)
+	if err != nil {
+		hotTier.Close()
+		wal.Close()
+		logger.Error("failed to open cold tier", zap.Error(err))
+		os.Exit(1)
+	}
+	// coldTier holds no file handles — no defer needed
+
+	// Create and start tiering engine
+	tierEngine := coldstore.NewTieringEngine(hotTier, coldTier, cfg)
+	tierEngine.Start()
+	defer tierEngine.Stop()
+
+	srv := server.New(cfg, Version, store, blacklist, wal, hotTier, coldTier, tierEngine)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

@@ -132,8 +132,8 @@ func validate(c *Config) error {
 	if c.Storage.HotTierMaxSize <= 0 {
 		errs = append(errs, "storage.hot_tier_max_size must be greater than 0")
 	}
-	if c.Storage.RetentionDays <= 0 {
-		errs = append(errs, "storage.retention_days must be greater than 0")
+	if c.Storage.RetentionDays < 0 {
+		errs = append(errs, "storage.retention_days must not be negative")
 	}
 
 	validHot := map[string]bool{"snappy": true, "lz4": true, "none": true}
