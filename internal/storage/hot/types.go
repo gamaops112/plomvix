@@ -11,10 +11,11 @@ const (
 	CFMetrics = "metrics"
 	CFJSON    = "json"
 	CFKV      = "kv"
+	CFMeta    = "_meta"
 )
 
 func AllColumnFamilies() []string {
-	return []string{"default", CFLogs, CFMetrics, CFJSON, CFKV}
+	return []string{"default", CFLogs, CFMetrics, CFJSON, CFKV, CFMeta}
 }
 
 func BuildTimeSeriesKey(timestampNs int64) []byte {

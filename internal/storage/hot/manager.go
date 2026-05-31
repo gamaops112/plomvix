@@ -3,18 +3,21 @@ package hot
 import (
 	"encoding/binary"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/plomvix/plomvix/internal/config"
 	walstore "github.com/plomvix/plomvix/internal/storage/wal"
 )
 
 type HotStats struct {
-	TotalWrites int64
-	DataDir     string
+	TotalWrites     int64
+	TotalDataWrites int64
+	DataDir         string
 }
 
 type Manager struct {
-	store *Store
+	store           *Store
+	totalDataWrites atomic.Int64
 }
 
 func Open(dataDir string, cfg *config.Config) (*Manager, error) {
@@ -27,22 +30,38 @@ func Open(dataDir string, cfg *config.Config) (*Manager, error) {
 
 func (m *Manager) WriteLog(timestampNs int64, payload []byte) error {
 	key := BuildTimeSeriesKey(timestampNs)
-	return m.store.Put(CFLogs, key, payload)
+	if err := m.store.Put(CFLogs, key, payload); err != nil {
+		return err
+	}
+	m.totalDataWrites.Add(1)
+	return nil
 }
 
 func (m *Manager) WriteMetric(timestampNs int64, metricName string, payload []byte) error {
 	key := BuildMetricKey(timestampNs, metricName)
-	return m.store.Put(CFMetrics, key, payload)
+	if err := m.store.Put(CFMetrics, key, payload); err != nil {
+		return err
+	}
+	m.totalDataWrites.Add(1)
+	return nil
 }
 
 func (m *Manager) WriteJSON(timestampNs int64, payload []byte) error {
 	key := BuildTimeSeriesKey(timestampNs)
-	return m.store.Put(CFJSON, key, payload)
+	if err := m.store.Put(CFJSON, key, payload); err != nil {
+		return err
+	}
+	m.totalDataWrites.Add(1)
+	return nil
 }
 
 func (m *Manager) WriteKV(userKey string, payload []byte) error {
 	key := BuildKVKey(userKey)
-	return m.store.Put(CFKV, key, payload)
+	if err := m.store.Put(CFKV, key, payload); err != nil {
+		return err
+	}
+	m.totalDataWrites.Add(1)
+	return nil
 }
 
 func (m *Manager) ReplayWALEntry(entry *walstore.Entry) error {
@@ -105,9 +124,21 @@ func (m *Manager) scanTimeRange(cf string, fromNs, toNs int64) ([][]byte, error)
 
 func (m *Manager) Stats() HotStats {
 	return HotStats{
-		TotalWrites: m.store.TotalWrites(),
-		DataDir:     m.store.dataDir,
+		TotalWrites:     m.store.TotalWrites(),
+		TotalDataWrites: m.totalDataWrites.Load(),
+		DataDir:         m.store.dataDir,
 	}
+}
+
+// GetMeta retrieves a value from the _meta column family by key.
+// Returns nil, nil if the key does not exist.
+func (m *Manager) GetMeta(key []byte) ([]byte, error) {
+	return m.store.Get(CFMeta, key)
+}
+
+// PutMeta writes a key-value pair to the _meta column family.
+func (m *Manager) PutMeta(key, value []byte) error {
+	return m.store.Put(CFMeta, key, value)
 }
 
 func (m *Manager) Close() {
