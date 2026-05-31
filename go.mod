@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/kr/logfmt v0.0.0-20210122060352-19f9bcb100e6
 	github.com/linxGnu/grocksdb v1.8.12
 	github.com/parquet-go/parquet-go v0.30.1
 	github.com/spf13/viper v1.21.0
@@ -19,6 +20,7 @@ require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/influxdata/go-syslog/v3 v3.0.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.0.0 // indirect

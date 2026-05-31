@@ -116,16 +116,16 @@ func TestIngestMetricsSuccess(t *testing.T) {
 	}
 }
 
-func TestIngestJSONMissingData(t *testing.T) {
+func TestIngestJSONGenericRecord(t *testing.T) {
 	h := newTestHandler(t)
 	body := map[string]interface{}{
 		"records": []map[string]interface{}{
-			{"timestamp": 0}, // data field is nil/missing
+			{"timestamp": 123456789, "event": "test"},
 		},
 	}
 	w := postJSON(t, h.IngestJSON, body)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", w.Code)
+	if w.Code != http.StatusCreated {
+		t.Errorf("status = %d, want 201", w.Code)
 	}
 }
 
