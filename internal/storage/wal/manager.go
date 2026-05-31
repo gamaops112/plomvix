@@ -64,6 +64,25 @@ func (m *Manager) DeleteSegment(index uint64) error {
 	return nil
 }
 
+// Rotate forces the WAL to close the current segment and open a new one,
+// regardless of the current segment size.
+//
+// Important: Writer.rotate() requires the caller to hold writer.mu.
+// Manager.Rotate is the public safe wrapper used by admin APIs.
+func (m *Manager) Rotate() error {
+	if m == nil || m.writer == nil {
+		return fmt.Errorf("WAL writer not initialized")
+	}
+
+	m.writer.mu.Lock()
+	defer m.writer.mu.Unlock()
+
+	if m.writer.currentFile == nil {
+		return fmt.Errorf("WAL writer is closed")
+	}
+	return m.writer.rotate()
+}
+
 func (m *Manager) Close() error {
 	return m.writer.Close()
 }

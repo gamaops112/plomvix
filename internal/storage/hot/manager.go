@@ -137,6 +137,11 @@ func (m *Manager) GetMeta(key []byte) ([]byte, error) {
 	return m.store.Get(CFMeta, key)
 }
 
+// DeleteMeta removes a key from the _meta column family.
+func (m *Manager) DeleteMeta(key []byte) error {
+	return m.store.Delete(CFMeta, key)
+}
+
 // PutMeta writes a key-value pair to the _meta column family.
 func (m *Manager) PutMeta(key, value []byte) error {
 	return m.store.Put(CFMeta, key, value)

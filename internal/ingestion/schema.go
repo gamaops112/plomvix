@@ -87,6 +87,12 @@ func LoadSchema(store *hot.Manager, dataType string) (*Schema, error) {
 	return &s, nil
 }
 
+// DeleteSchema removes the stored schema for a data type from the _meta CF.
+// After deletion, schema inference starts fresh on the next ingest.
+func DeleteSchema(store *hot.Manager, dataType string) error {
+	return store.DeleteMeta(schemaKey(dataType))
+}
+
 // SaveSchema persists a schema to RocksDB.
 func SaveSchema(store *hot.Manager, s *Schema) error {
 	raw, err := json.Marshal(s)
