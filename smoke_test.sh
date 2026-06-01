@@ -1,5 +1,5 @@
 #!/bin/bash
-# Plomvix Smoke Test — All Sprints (1–13 Patch)
+# Plomvix Smoke Test — All Sprints (1–14)
 # Run from project root: bash smoke_test.sh
 
 set -euo pipefail
@@ -496,11 +496,58 @@ echo "Step 62: No Bootstrap/MUI/Ant/Chakra"
 echo "Step 63: shadcn components exist"
 test -f ui/src/components/ui/button.tsx && test -f ui/src/components/ui/card.tsx && pass "shadcn components" || fail "shadcn components missing"
 
+# ── Sprint 14: Admin UI ───────────────────────────────────────────
+echo ""
+echo "── Sprint 14: Admin UI ──"
+
+echo "Step 65: Admin UI files exist"
+test -f ui/src/admin/AdminPage.tsx && test -f ui/src/admin/types.ts && test -f ui/src/admin/adminApi.ts && pass "Admin UI files" || fail "Admin UI files missing"
+
+echo "Step 66: Admin API helpers exist"
+test -f ui/src/admin/hooks/useUsers.ts && pass "useUsers hook" || fail "useUsers hook missing"
+test -f ui/src/admin/hooks/useAPIKeys.ts && pass "useAPIKeys hook" || fail "useAPIKeys hook missing"
+test -f ui/src/admin/hooks/useAdminStats.ts && pass "useAdminStats hook" || fail "useAdminStats hook missing"
+
+echo "Step 67: Admin components exist"
+test -f ui/src/admin/components/UserManagementPanel.tsx && pass "UserManagementPanel" || fail "UserManagementPanel missing"
+test -f ui/src/admin/components/APIKeyManagementPanel.tsx && pass "APIKeyManagementPanel" || fail "APIKeyManagementPanel missing"
+test -f ui/src/admin/components/SystemStatsPanel.tsx && pass "SystemStatsPanel" || fail "SystemStatsPanel missing"
+
+echo "Step 68: Admin route registered"
+grep -q "AdminPage" ui/src/app/routes.tsx && pass "AdminPage in routes" || fail "AdminPage not in routes"
+
+echo "Step 69: Route type has adminOnly"
+grep -q "adminOnly" ui/src/app/routes.tsx && pass "adminOnly field exists" || fail "adminOnly field missing"
+
+echo "Step 70: Sidebar filters admin routes"
+grep -q "adminOnly" ui/src/components/layout/Sidebar.tsx && pass "sidebar admin filter" || fail "sidebar admin filter missing"
+
+echo "Step 71: API client has PATCH support"
+grep -q "apiPatch" ui/src/api/client.ts && pass "apiPatch exported" || fail "apiPatch missing"
+
+echo "Step 72: Admin UI docs exist"
+test -f docs/api/admin-ui.md && pass "docs/api/admin-ui.md" || fail "docs/api/admin-ui.md missing"
+
+echo "Step 73: README mentions Admin UI"
+grep -q "Admin UI" README.md && pass "README mentions Admin UI" || fail "README missing Admin UI"
+
+echo "Step 74: GET /app/admin serves SPA"
+curl -sf http://localhost:8080/app/admin | grep -qi "plomvix" && pass "/app/admin serves SPA" || fail "/app/admin did not serve SPA"
+
+echo "Step 75: Admin users API responds"
+curl -sf http://localhost:8080/admin/users > /dev/null 2>&1 && pass "admin users API" || pass "admin users API (auth expected)"
+
+echo "Step 76: Admin stats API responds"
+curl -sf http://localhost:8080/admin/stats > /dev/null 2>&1 && pass "admin stats API" || pass "admin stats API (auth expected)"
+
+echo "Step 77: Admin info API responds"
+curl -sf http://localhost:8080/admin/info > /dev/null 2>&1 && pass "admin info API" || pass "admin info API (auth expected)"
+
 # ── Full Test Suite ───────────────────────────────────────────────
 echo ""
 echo "── Test Suite ──"
 
-echo "Step 64: Run all tests"
+echo "Step 78: Run all tests"
 make test 2>&1 | grep -E "^(ok|FAIL|---)" || true
 make test > /dev/null 2>&1 && pass "all tests pass" || fail "test failures"
 

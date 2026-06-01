@@ -108,6 +108,15 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   return apiRequest<T>(path, init);
 }
 
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const init: RequestInit = {
+    method: 'PATCH',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  };
+  return apiRequest<T>(path, init);
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const init: RequestInit = { method: 'DELETE' };
   return apiRequest<T>(path, init);
