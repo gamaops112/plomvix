@@ -1,12 +1,17 @@
 import { NavLink } from 'react-router-dom';
 import { navRoutes } from '../../app/routes';
 import { useTheme } from '../../theme/ThemeContext';
+import { useAuth } from '../../auth/useAuth';
 
 export function Sidebar() {
   const { theme } = useTheme();
+  const { user } = useAuth();
 
   const visible = navRoutes.filter((route) => {
     if (route.devOnly && !theme.dev_panel) {
+      return false;
+    }
+    if (route.adminOnly && user?.role !== 'admin') {
       return false;
     }
     return true;

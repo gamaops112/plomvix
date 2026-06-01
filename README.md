@@ -140,6 +140,25 @@ To disable the design panel in production, set `"dev_panel": false` in `theme.js
 
 ---
 
+## Admin UI
+
+Plomvix includes a browser-based administration interface at `/app/admin`
+for managing users, API keys, and monitoring system health. Built with
+React 18, TypeScript, Tailwind CSS v4, and shadcn/ui.
+
+- **Route:** `/app/admin` — accessible from the sidebar for admin users
+- **Login required:** Authenticated admin user session (httpOnly cookie)
+- **User management:** List, create, edit, and delete users with
+  confirmation safeguards
+- **API key management:** Generate, copy, show/hide, and revoke API keys
+  per user
+- **System stats:** Auto-refreshing cards for WAL, hot tier, cold tier,
+  runtime, build info, and uptime
+
+See [docs/api/admin-ui.md](docs/api/admin-ui.md) for full documentation.
+
+---
+
 ## Make Commands
 
 | Command | Description |

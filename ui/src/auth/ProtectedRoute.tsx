@@ -1,9 +1,15 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from '@/components/ui/card';
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { authenticated, loading } = useAuth();
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  adminOnly?: boolean;
+}
+
+export function ProtectedRoute({ children, adminOnly }: ProtectedRouteProps) {
+  const { user, authenticated, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -21,6 +27,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!authenticated) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
+  }
+
+  if (adminOnly && user?.role !== 'admin') {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 text-center space-y-3">
+            <div className="text-4xl">🔒</div>
+            <h2 className="text-xl font-semibold text-foreground">Access Denied</h2>
+            <p className="text-muted-foreground">Admin role required to access this page.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return <>{children}</>;
