@@ -43,13 +43,6 @@ export function App() {
             <AppShell />
           </ProtectedRoute>
         } />
-        <Route path="/dev/design/*" element={
-          <ProtectedRoute>
-            <Shell>
-              <AppRoutes />
-            </Shell>
-          </ProtectedRoute>
-        } />
         <Route path="/" element={<DefaultRedirect />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -25,7 +25,7 @@ export const appRoutes: AppRoute[] = [
     adminOnly: true,
   },
   {
-    path: '/dev/design',
+    path: '/app/dev/design',
     label: 'Design Panel',
     element: <DevDesignPage />,
     nav: true,

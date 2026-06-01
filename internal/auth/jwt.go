@@ -65,3 +65,26 @@ func ParseToken(tokenString string, cfg *config.Config) (*Claims, error) {
 	}
 	return claims, nil
 }
+
+func ParseTokenExpired(tokenString string, cfg *config.Config) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&Claims{},
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v",
+					token.Header["alg"])
+			}
+			return []byte(cfg.Auth.JWTSecret), nil
+		},
+		jwt.WithoutClaimsValidation(), // Accept expired tokens for refresh
+	)
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := token.Claims.(*Claims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+	return claims, nil
+}

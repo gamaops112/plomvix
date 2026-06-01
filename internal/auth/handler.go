@@ -74,28 +74,35 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
-	user := RequireUser(r.Context())
-
-	freshUser, err := h.store.GetUserByID(user.ID)
-	if err != nil {
-		utils.InternalError(w, r, "failed to fetch user")
+	// Extract the cookie token directly — this endpoint is public so
+	// auth middleware doesn't set the user in context.
+	tokenString, source := TokenFromRequest(r)
+	if source == TokenSourceNone {
+		utils.Unauthorized(w, r, "no authentication token provided")
 		return
 	}
 
-	tokenString, source := TokenFromRequest(r)
-	if source != TokenSourceNone {
-		if claims, err := ParseToken(tokenString, h.cfg); err == nil {
-			h.blacklist.Add(claims.JTI, claims.ExpiresAt.Time)
-		}
+	claims, err := ParseTokenExpired(tokenString, h.cfg)
+	if err != nil {
+		utils.Unauthorized(w, r, "invalid or expired token")
+		return
 	}
 
-	newToken, claims, err := GenerateTokenWithClaims(freshUser, h.cfg)
+	freshUser, err := h.store.GetUserByID(claims.UserID)
+	if err != nil {
+		utils.Unauthorized(w, r, "user not found")
+		return
+	}
+
+	h.blacklist.Add(claims.JTI, claims.ExpiresAt.Time)
+
+	newToken, newClaims, err := GenerateTokenWithClaims(freshUser, h.cfg)
 	if err != nil {
 		utils.InternalError(w, r, "failed to generate token")
 		return
 	}
 
-	http.SetCookie(w, NewTokenCookie(newToken, claims.ExpiresAt.Time, h.cfg))
+	http.SetCookie(w, NewTokenCookie(newToken, newClaims.ExpiresAt.Time, h.cfg))
 
 	utils.OK(w, r, map[string]interface{}{
 		"token":      newToken,

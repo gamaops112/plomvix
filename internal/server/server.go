@@ -155,6 +155,7 @@ func (s *Server) setupRoutes() {
 	// Public — no auth
 	s.router.Get("/health", s.handleHealth)
 	s.router.Post("/auth/login", authHandler.Login)
+	s.router.Post("/auth/refresh", authHandler.Refresh)
 	s.router.Get("/openapi.json", s.handleOpenAPISpec)
 	s.router.Get("/docs", s.handleDocs)
 
@@ -165,7 +166,6 @@ func (s *Server) setupRoutes() {
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(s.store, s.blacklist, s.cfg))
 		r.Post("/auth/logout", authHandler.Logout)
-		r.Post("/auth/refresh", authHandler.Refresh)
 	})
 
 	// Ingestion — auth required
