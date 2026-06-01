@@ -1,6 +1,6 @@
 import type { Theme, ThemeMode } from './types';
 
-const VAR_MAP: Record<string, string> = {
+const COLOR_VAR_MAP: Record<string, string> = {
   primary: '--plx-color-primary',
   secondary: '--plx-color-secondary',
   accent: '--plx-color-accent',
@@ -15,6 +15,9 @@ const VAR_MAP: Record<string, string> = {
   warning: '--plx-color-warning',
   success: '--plx-color-success',
   info: '--plx-color-info',
+};
+
+const TYPO_VAR_MAP: Record<string, string> = {
   font_family: '--plx-font-family',
   font_size_xs: '--plx-font-size-xs',
   font_size_sm: '--plx-font-size-sm',
@@ -25,34 +28,60 @@ const VAR_MAP: Record<string, string> = {
   font_weight_medium: '--plx-font-weight-medium',
   font_weight_semibold: '--plx-font-weight-semibold',
   font_weight_bold: '--plx-font-weight-bold',
+};
+
+const RADIUS_VAR_MAP: Record<string, string> = {
   sm: '--plx-radius-sm',
   md: '--plx-radius-md',
   lg: '--plx-radius-lg',
   xl: '--plx-radius-xl',
 };
 
+const SPACING_VAR_MAP: Record<string, string> = {
+  xs: '--plx-spacing-xs',
+  sm: '--plx-spacing-sm',
+  md: '--plx-spacing-md',
+  lg: '--plx-spacing-lg',
+  xl: '--plx-spacing-xl',
+};
+
+const SHADOW_VAR_MAP: Record<string, string> = {
+  sm: '--plx-shadow-sm',
+  md: '--plx-shadow-md',
+  lg: '--plx-shadow-lg',
+};
+
+const LAYOUT_VAR_MAP: Record<string, string> = {
+  sidebar_width: '--plx-sidebar-width',
+  navbar_height: '--plx-navbar-height',
+  transition_speed: '--plx-transition-speed',
+};
+
+function mapTokens(
+  source: Record<string, string> | undefined,
+  varMap: Record<string, string>,
+): Record<string, string> {
+  const vars: Record<string, string> = {};
+  if (!source) return vars;
+  for (const [key, cssVar] of Object.entries(varMap)) {
+    if (key in source) {
+      vars[cssVar] = source[key];
+    }
+  }
+  return vars;
+}
+
 export function themeToCSSVariables(theme: Theme, mode?: ThemeMode): Record<string, string> {
   const activeMode = mode ?? theme.mode;
   const colors = activeMode === 'dark' ? theme.tokens.dark_colors : theme.tokens.colors;
-  const vars: Record<string, string> = {};
+  let vars: Record<string, string> = {};
 
-  for (const [key, cssVar] of Object.entries(VAR_MAP)) {
-    if (key in colors) {
-      vars[cssVar] = (colors as unknown as Record<string, string>)[key];
-    }
-  }
-
-  const typo = theme.tokens.typography;
-  vars['--plx-font-family'] = typo.font_family;
-  vars['--plx-font-size-xs'] = typo.font_size_xs;
-  vars['--plx-font-size-sm'] = typo.font_size_sm;
-  vars['--plx-font-size-base'] = typo.font_size_base;
-  vars['--plx-font-size-lg'] = typo.font_size_lg;
-  vars['--plx-font-size-xl'] = typo.font_size_xl;
-  vars['--plx-font-weight-regular'] = typo.font_weight_regular;
-  vars['--plx-font-weight-medium'] = typo.font_weight_medium;
-  vars['--plx-font-weight-semibold'] = typo.font_weight_semibold;
-  vars['--plx-font-weight-bold'] = typo.font_weight_bold;
+  vars = { ...vars, ...mapTokens(colors as unknown as Record<string, string>, COLOR_VAR_MAP) };
+  vars = { ...vars, ...mapTokens(theme.tokens.typography as unknown as Record<string, string>, TYPO_VAR_MAP) };
+  vars = { ...vars, ...mapTokens(theme.tokens.radii as unknown as Record<string, string>, RADIUS_VAR_MAP) };
+  vars = { ...vars, ...mapTokens(theme.tokens.spacing as unknown as Record<string, string>, SPACING_VAR_MAP) };
+  vars = { ...vars, ...mapTokens(theme.tokens.shadows as unknown as Record<string, string>, SHADOW_VAR_MAP) };
+  vars = { ...vars, ...mapTokens(theme.tokens.layout as unknown as Record<string, string>, LAYOUT_VAR_MAP) };
 
   return vars;
 }
@@ -61,7 +90,6 @@ export function applyTheme(theme: Theme, mode?: ThemeMode): void {
   const vars = themeToCSSVariables(theme, mode);
   const root = document.documentElement;
 
-  // Remove old plx vars first
   const keysToRemove: string[] = [];
   const style = root.style;
   for (let i = 0; i < style.length; i++) {

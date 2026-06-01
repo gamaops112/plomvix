@@ -6,7 +6,7 @@ export CGO_ENABLED
 ROCKSDB_LOCAL  ?= $(PWD)/.rocksdb
 ROCKSDB_LIBDIR  = $(ROCKSDB_LOCAL)/usr/lib/x86_64-linux-gnu
 C_INCLUDE_PATH  ?= $(ROCKSDB_LOCAL)/usr/include
-CGO_LDFLAGS     ?= -L$(ROCKSDB_LIBDIR) -lrocksdb -lgflags -lstdc++ -lm -lz -lsnappy -llz4 -lzstd -lbz2 -Wl,-rpath,$(ROCKSDB_LIBDIR)
+CGO_LDFLAGS     ?= -L$(ROCKSDB_LIBDIR) -lrocksdb -lgflags -lstdc++ -lm -lz -lsnappy -llz4 -lzstd -lbz2 -Wl,--disable-new-dtags -Wl,-rpath,$(ROCKSDB_LIBDIR)
 export C_INCLUDE_PATH
 export CGO_LDFLAGS
 

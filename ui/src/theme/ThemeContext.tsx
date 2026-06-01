@@ -32,7 +32,10 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
   const { emit } = useAppEvents();
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [draft, setDraft] = useState<Theme>(defaultTheme);
-  const [mode, setMode] = useState<ThemeMode>('light');
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    const stored = localStorage.getItem('plomvix-mode');
+    return (stored === 'dark' || stored === 'light') ? stored : 'light';
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,6 +110,7 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
       error,
       setMode: (m: ThemeMode) => {
         setMode(m);
+        localStorage.setItem('plomvix-mode', m);
         setDraft((prev) => ({ ...prev, mode: m }));
       },
       setDraftTheme,

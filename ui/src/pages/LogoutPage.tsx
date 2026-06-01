@@ -22,7 +22,7 @@ export function LogoutPage() {
   if (!signingOut) return null;
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen bg-background">
       <Card>
         <CardContent className="p-8 text-center">
           <p className="text-muted-foreground">Signing out...</p>

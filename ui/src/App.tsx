@@ -6,6 +6,7 @@ import { LogoutPage } from './pages/LogoutPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { ToastViewport } from './components/feedback/ToastViewport';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from './auth/useAuth';
 
 function AppShell() {
@@ -18,7 +19,16 @@ function AppShell() {
 
 function DefaultRedirect() {
   const { authenticated, loading } = useAuth();
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="space-y-3 w-[200px]">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+      </div>
+    );
+  }
   return <Navigate to={authenticated ? '/app/explore' : '/login'} replace />;
 }
 
@@ -33,7 +43,7 @@ export function App() {
             <AppShell />
           </ProtectedRoute>
         } />
-        <Route path="/dev/design" element={
+        <Route path="/dev/design/*" element={
           <ProtectedRoute>
             <Shell>
               <AppRoutes />

@@ -3,7 +3,7 @@ import { navRoutes } from '../../app/routes';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAuth } from '../../auth/useAuth';
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -25,11 +25,13 @@ export function Sidebar() {
           <li key={route.path}>
             <NavLink
               to={route.path}
+              onClick={onNavigate}
               className={({ isActive }) =>
                 isActive
-                  ? 'block px-3 py-2 rounded-md text-sm bg-primary text-white'
+                  ? 'block px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground aria-[current]:bg-primary aria-[current]:text-primary-foreground'
                   : 'block px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground'
               }
+              aria-current={undefined}
             >
               {route.label}
             </NavLink>
