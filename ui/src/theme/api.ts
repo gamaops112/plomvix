@@ -1,52 +1,20 @@
 import type { Theme } from './types';
-
-const BASE = '';
-
-async function unwrap<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      detail = body.details?.[0] ?? body.error ?? detail;
-    } catch {
-      // use status text
-    }
-    throw new Error(detail);
-  }
-  const envelope = await res.json();
-  return envelope.data as T;
-}
+import { apiGet, apiPut, apiPost } from '../api/client';
 
 export async function fetchTheme(): Promise<Theme> {
-  return unwrap<Theme>(
-    await fetch(`${BASE}/api/theme`, { credentials: 'same-origin' })
-  );
+  return apiGet<Theme>('/api/theme');
 }
 
 export async function saveTheme(theme: Theme): Promise<Theme> {
-  return unwrap<Theme>(
-    await fetch(`${BASE}/api/theme`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify(theme),
-    })
-  );
+  return apiPut<Theme>('/api/theme', theme);
 }
 
 export async function resetTheme(): Promise<Theme> {
-  return unwrap<Theme>(
-    await fetch(`${BASE}/api/theme/reset`, {
-      method: 'POST',
-      credentials: 'same-origin',
-    })
-  );
+  return apiPost<Theme>('/api/theme/reset');
 }
 
 export async function exportTheme(): Promise<Blob> {
-  const res = await fetch(`${BASE}/api/theme/export`, {
-    credentials: 'same-origin',
-  });
+  const res = await fetch('/api/theme/export', { credentials: 'include' });
   if (!res.ok) {
     throw new Error('Theme export failed');
   }

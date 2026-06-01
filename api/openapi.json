@@ -70,6 +70,12 @@
         "in": "header",
         "name": "X-API-Key",
         "description": "API key from POST /admin/users/{id}/apikey"
+      },
+      "CookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "plomvix_token",
+        "description": "httpOnly browser session cookie set by POST /auth/login"
       }
     },
     "schemas": {
@@ -747,7 +753,7 @@
         },
         "responses": {
           "200": {
-            "description": "Authentication successful",
+            "description": "Authentication successful. Also sets httpOnly cookie plomvix_token for browser clients",
             "content": {
               "application/json": {
                 "schema": {
@@ -851,11 +857,14 @@
           },
           {
             "APIKeyAuth": []
+          },
+          {
+            "CookieAuth": []
           }
         ],
         "responses": {
           "200": {
-            "description": "Logout successful",
+            "description": "Logout successful. Clears the plomvix_token cookie",
             "content": {
               "application/json": {
                 "schema": {
@@ -903,6 +912,9 @@
           },
           {
             "APIKeyAuth": []
+          },
+          {
+            "CookieAuth": []
           }
         ],
         "requestBody": {
@@ -920,7 +932,7 @@
         },
         "responses": {
           "200": {
-            "description": "Token refreshed successfully",
+            "description": "Token refreshed successfully. Refreshes the plomvix_token cookie for browser clients",
             "content": {
               "application/json": {
                 "schema": {
@@ -1658,7 +1670,11 @@
         "summary": "Get current theme",
         "description": "Returns the active UI theme configuration including color tokens, typography, spacing, shadows, and layout settings.",
         "operationId": "getTheme",
-        "security": [],
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Current theme configuration",
@@ -1697,6 +1713,9 @@
           },
           {
             "APIKeyAuth": []
+          },
+          {
+            "CookieAuth": []
           }
         ],
         "requestBody": {
@@ -1779,6 +1798,9 @@
           },
           {
             "APIKeyAuth": []
+          },
+          {
+            "CookieAuth": []
           }
         ],
         "responses": {
@@ -1841,6 +1863,9 @@
           },
           {
             "APIKeyAuth": []
+          },
+          {
+            "CookieAuth": []
           }
         ],
         "responses": {

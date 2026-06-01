@@ -52,6 +52,25 @@
   --color-error: var(--plx-color-error);
   --color-warning: var(--plx-color-warning);
   --color-info: var(--plx-color-info);
+  --color-bg-primary: var(--plx-color-background);
+  --color-bg-secondary: var(--plx-color-surface);
+  --color-text-primary: var(--plx-color-text);
+  --color-text-secondary: var(--plx-color-text-muted);
+  --color-accent: var(--plx-color-accent);
+  --color-accent-muted: rgba(20, 184, 166, 0.15);
+  --color-danger: var(--plx-color-error);
+  --space-1: var(--plx-spacing-xs);
+  --space-2: var(--plx-spacing-sm);
+  --space-3: 0.75rem;
+  --space-4: var(--plx-spacing-md);
+  --space-6: var(--plx-spacing-lg);
+  --space-8: var(--plx-spacing-xl);
+  --radius-md: var(--plx-radius-md);
+  --radius-lg: var(--plx-radius-lg);
+  --shadow-md: var(--plx-shadow-md);
+  --font-size-sm: var(--plx-font-size-sm);
+  --font-size-base: var(--plx-font-size-base);
+  --font-size-2xl: 1.5rem;
 }
 
 *, *::before, *::after {
@@ -233,4 +252,97 @@ html, body, #root {
 
 .toast-close:hover {
   color: var(--color-text);
+}
+
+/* ── Login page ── */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-4);
+  background: var(--color-bg-primary);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: var(--space-8);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.login-card h1 {
+  text-align: center;
+  margin-bottom: var(--space-6);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-2xl);
+}
+
+.login-card .form-field {
+  margin-bottom: var(--space-4);
+}
+
+.login-card .form-field label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.login-card .form-field input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.login-card .form-field input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-muted);
+}
+
+.login-card .form-field input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-4);
+}
+
+/* ── Shell header layout ── */
+.shell-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.shell-username {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.shell-logout-link {
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.shell-logout-link:hover {
+  text-decoration: underline;
 }

@@ -1,11 +1,9 @@
 package auth
 
 import (
-	"net/http"
-	"strings"
-
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/pkg/utils"
+	"net/http"
 )
 
 func Middleware(store *Store, blacklist *Blacklist, cfg *config.Config) func(http.Handler) http.Handler {
@@ -22,9 +20,8 @@ func Middleware(store *Store, blacklist *Blacklist, cfg *config.Config) func(htt
 				return
 			}
 
-			authHeader := r.Header.Get("Authorization")
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+			tokenString, source := TokenFromRequest(r)
+			if source != TokenSourceNone {
 				claims, err := ParseToken(tokenString, cfg)
 				if err != nil {
 					utils.Unauthorized(w, r, "invalid or expired token")
@@ -36,7 +33,7 @@ func Middleware(store *Store, blacklist *Blacklist, cfg *config.Config) func(htt
 				}
 				user, err := store.GetUserByID(claims.UserID)
 				if err != nil {
-					utils.Unauthorized(w, r, "invalid or expired token")
+					utils.Unauthorized(w, r, "user not found")
 					return
 				}
 				next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), user)))

@@ -18,7 +18,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(user *User, cfg *config.Config) (string, error) {
+func GenerateTokenWithClaims(user *User, cfg *config.Config) (string, *Claims, error) {
 	now := time.Now()
 	claims := &Claims{
 		UserID:   user.ID,
@@ -26,13 +26,22 @@ func GenerateToken(user *User, cfg *config.Config) (string, error) {
 		Role:     user.Role,
 		JTI:      uuid.New().String(),
 		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(now),
+			IssuedAt: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(
 				now.Add(time.Duration(cfg.Auth.JWTExpirySeconds) * time.Second)),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(cfg.Auth.JWTSecret))
+	signed, err := token.SignedString([]byte(cfg.Auth.JWTSecret))
+	if err != nil {
+		return "", nil, err
+	}
+	return signed, claims, nil
+}
+
+func GenerateToken(user *User, cfg *config.Config) (string, error) {
+	token, _, err := GenerateTokenWithClaims(user, cfg)
+	return token, err
 }
 
 func ParseToken(tokenString string, cfg *config.Config) (*Claims, error) {

@@ -2,12 +2,13 @@
 
 ## Authentication
 
-Plomvix supports two authentication methods. Include one on every request to a protected endpoint:
+Plomvix supports three authentication methods. Include one on every request to a protected endpoint:
 
 - **JWT Bearer token** (human users): `Authorization: Bearer <jwt_token>`
 - **API Key** (machine/service clients): `X-API-Key: <api_key>`
+- **Cookie session** (browser UI): `plomvix_token` httpOnly cookie set by login
 
-If both headers are present, `X-API-Key` takes priority. A failed API key check returns 401 immediately — the JWT is not checked as fallback.
+If multiple auth methods are present, the order of precedence is: `X-API-Key`, `Authorization: Bearer`, `plomvix_token` cookie.
 
 ---
 
@@ -20,6 +21,15 @@ Health check. Returns version, uptime, and environment info. No auth required.
 
 #### `POST /auth/login`
 Authenticate with username and password. Returns a JWT token.
+
+When accessed from a browser, the response also sets a `plomvix_token` httpOnly cookie with properties:
+- HttpOnly: true
+- Path: /
+- SameSite: Lax
+- Secure: true in production, false in development
+- MaxAge matches JWT expiry
+
+Browser clients should use `credentials: "include"` on API requests instead of storing the JWT token. The JWT response body is still available for API clients.
 
 **Request:**
 ```json
@@ -47,9 +57,9 @@ Authenticate with username and password. Returns a JWT token.
 ### Protected (auth required)
 
 #### `POST /auth/logout`
-Invalidate the current JWT token. Returns 200 if authenticated via API key (nothing to blacklist).
+Invalidate the current JWT token. Clears the `plomvix_token` cookie when present. Always returns 200 for idempotent logout.
 
-**Auth:** JWT or API key
+**Auth:** JWT (Bearer or Cookie), API key. Cookie-based logout does not require Authorization header.
 
 **Response (200):**
 ```json
@@ -57,9 +67,11 @@ Invalidate the current JWT token. Returns 200 if authenticated via API key (noth
 ```
 
 #### `POST /auth/refresh`
-Invalidate the current JWT and issue a new one.
+Invalidate the current JWT and issue a new one. Accepts Authorization Bearer token or plomvix_token cookie.
 
-**Auth:** JWT only
+For cookie-authenticated requests, sets a new plomvix_token cookie.
+
+**Auth:** JWT (Bearer or Cookie) only
 
 **Response (200):**
 ```json
@@ -186,3 +198,27 @@ All errors follow this structure:
 ```
 
 Standard error codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
+
+## Browser UI Authentication
+
+The Plomvix web UI available at `/login` and `/app/*` uses httpOnly cookies for session management.
+
+### Cookie Details
+- **Name:** `plomvix_token`
+- **HttpOnly:** `true` — not accessible to JavaScript (XSS protection)
+- **Path:** `/` — available to all routes
+- **SameSite:** `Lax` — prevents CSRF from external sites
+- **Secure:** `true` in production — HTTPS only
+
+### How It Works
+1. Browser posts credentials to `POST /auth/login`
+2. Server responds with a `Set-Cookie: plomvix_token=<jwt>; HttpOnly; Path=/; ...` header
+3. All subsequent API requests from the browser include `credentials: "include"` to send the cookie
+4. Server middleware checks for the cookie when no `Authorization` header is present
+5. `POST /auth/logout` clears the cookie
+
+### Security Rules
+- **Never store the JWT in `localStorage` or `sessionStorage`**. The token lives only in the httpOnly cookie.
+- The API client automatically retries a failed request once after receiving 401 by calling `POST /auth/refresh`.
+- If refresh fails, the user is redirected to `/login`.
+- The `/login?next=` parameter allows safe redirects after login (only `/app/*` and `/dev/design` paths are accepted).

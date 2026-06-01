@@ -84,6 +84,90 @@ func TestSPAHandlerRejectsPathTraversal(t *testing.T) {
 	}
 }
 
+func TestSPAHandlerServesIndexForLogin(t *testing.T) {
+	distDir := createTestUIDist(t)
+	handler := newSPAHandler(distDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Plomvix Test UI") {
+		t.Fatalf("expected index.html content, got %q", rec.Body.String())
+	}
+}
+
+func TestSPAHandlerServesIndexForLogout(t *testing.T) {
+	distDir := createTestUIDist(t)
+	handler := newSPAHandler(distDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Plomvix Test UI") {
+		t.Fatalf("expected index.html content, got %q", rec.Body.String())
+	}
+}
+
+func TestSPAHandlerServesIndexForDevDesign(t *testing.T) {
+	distDir := createTestUIDist(t)
+	handler := newSPAHandler(distDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/dev/design", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Plomvix Test UI") {
+		t.Fatalf("expected index.html content, got %q", rec.Body.String())
+	}
+}
+
+func TestSPAHandlerServesIndexForAppExplore(t *testing.T) {
+	distDir := createTestUIDist(t)
+	handler := newSPAHandler(distDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/app/explore", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Plomvix Test UI") {
+		t.Fatalf("expected index.html content, got %q", rec.Body.String())
+	}
+}
+
+func TestSPAHandlerNonAppRoutesServesIndex(t *testing.T) {
+	distDir := createTestUIDist(t)
+	handler := newSPAHandler(distDir)
+
+	paths := []string{"/login", "/logout", "/dev/design"}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected 200 for %s, got %d", path, rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), "Plomvix Test UI") {
+				t.Errorf("expected index.html content for %s", path)
+			}
+		})
+	}
+}
+
 // createTestUIDist creates a minimal fake ui/dist/ for testing.
 func createTestUIDist(t *testing.T) string {
 	t.Helper()
