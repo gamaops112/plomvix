@@ -1,4 +1,4 @@
-.PHONY: run build test test-verbose vet lint tidy clean coverage help
+.PHONY: run build test test-verbose vet lint tidy clean coverage ui-test integration-test check help
 
 CGO_ENABLED  ?= 1
 export CGO_ENABLED
@@ -67,11 +67,16 @@ ui-dev:
 ui-build:
 	cd ui && npm run build
 
-## dev: Start Go server and Vite dev server together (development mode)
-dev:
-	cd ui && npx concurrently \
-		"PLOMVIX_UI_DEV_MODE=true go run $(LDFLAGS) ../cmd/plomvix" \
-		"npm run dev"
+## ui-test: Run frontend tests
+ui-test:
+	cd ui && npm run test
+
+## integration-test: Run integration tests
+integration-test:
+	export C_INCLUDE_PATH=$(C_INCLUDE_PATH) && export LD_LIBRARY_PATH=$(ROCKSDB_LIBDIR) && CGO_ENABLED=1 go test -race ./tests/integration/...
+
+## check: Run all checks (lint, vet, tests, build)
+check: lint vet test ui-test ui-build
 
 ## help: Show available make commands
 help:

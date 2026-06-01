@@ -22,6 +22,12 @@ func newSPAHandler(distDir string) http.Handler {
 			return
 		}
 
+		// Non-/app routes (login, logout, dev/design): serve index.html for client-side routing
+		if !strings.HasPrefix(r.URL.Path, "/app") {
+			http.ServeFile(w, r, indexPath)
+			return
+		}
+
 		// Strip the /app prefix to get the path relative to distDir
 		trimmed := strings.TrimPrefix(r.URL.Path, "/app")
 		if trimmed == "" || trimmed == "/" {

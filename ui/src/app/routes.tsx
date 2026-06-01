@@ -14,9 +14,9 @@ export type AppRoute = {
 };
 
 export const appRoutes: AppRoute[] = [
-  { path: '/',        label: 'Home',    element: <HomePlaceholder />,    nav: false },
-  { path: '/explore', label: 'Explore', element: <ExplorePlaceholder />, nav: true  },
-  { path: '/admin',   label: 'Admin',   element: <AdminPlaceholder />,   nav: true  },
+  { path: '/app',           label: 'Home',    element: <HomePlaceholder />,    nav: false },
+  { path: '/app/explore',   label: 'Explore', element: <ExplorePlaceholder />, nav: true  },
+  { path: '/app/admin',     label: 'Admin',   element: <AdminPlaceholder />,   nav: true  },
   {
     path: '/dev/design',
     label: 'Design Panel',

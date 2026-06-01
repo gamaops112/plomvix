@@ -231,10 +231,16 @@ func (s *Server) setupRoutes() {
 			}
 			s.router.Handle("/app", uiProxy)
 			s.router.Handle("/app/*", uiProxy)
+			s.router.Handle("/login", uiProxy)
+			s.router.Handle("/logout", uiProxy)
+			s.router.Handle("/dev/design", uiProxy)
 		} else {
 			uiHandler := newSPAHandler("ui/dist")
 			s.router.Handle("/app", uiHandler)
 			s.router.Handle("/app/*", uiHandler)
+			s.router.Handle("/login", uiHandler)
+			s.router.Handle("/logout", uiHandler)
+			s.router.Handle("/dev/design", uiHandler)
 		}
 	}
 }

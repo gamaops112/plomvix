@@ -108,6 +108,16 @@ make build        # build both Go binary and React app for production
 
 See [docs/ui.md](docs/ui.md) for details.
 
+### UI Authentication
+
+The Plomvix browser UI is available at `/login` and `/app/explore`.
+
+- Default credentials: configured via `auth.default_admin_username` and `auth.default_admin_password` in `config.yaml`
+- Login sets an httpOnly `plomvix_token` cookie (not accessible to JavaScript)
+- API clients can continue using JWT bearer tokens (`Authorization: Bearer <token>`) or API keys (`X-API-Key`)
+- **Do not** store JWTs in browser `localStorage` — the httpOnly cookie handles browser sessions automatically
+- `make dev` starts both the Go server and Vite dev server for local development
+
 ---
 
 ## Theme Engine
