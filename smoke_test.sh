@@ -1,5 +1,5 @@
 #!/bin/bash
-# Plomvix Smoke Test — All Sprints (1–11)
+# Plomvix Smoke Test — All Sprints (1–13 Patch)
 # Run from project root: bash smoke_test.sh
 
 set -euo pipefail
@@ -474,11 +474,33 @@ SHUTDOWN_CODE=$?
 SERVER_PID=""
 [ "$SHUTDOWN_CODE" -eq 0 ] && pass "clean shutdown (exit $SHUTDOWN_CODE)" || fail "shutdown exit $SHUTDOWN_CODE"
 
+# ── UI Dependency Audit ──────────────────────────────────────────
+echo ""
+echo "── UI Dependency Audit ──"
+
+echo "Step 58: UI dependencies are pinned (no ^/~)"
+(cd ui && npm run check:deps) > /dev/null 2>&1 && pass "check:deps" || fail "check:deps"
+
+echo "Step 59: UI build"
+(cd ui && npm run build) > /dev/null 2>&1 && pass "npm run build" || fail "npm run build"
+
+echo "Step 60: UI typecheck"
+(cd ui && npm run typecheck) > /dev/null 2>&1 && pass "tsc -b" || fail "tsc -b"
+
+echo "Step 61: UI tests"
+(cd ui && npm test) > /dev/null 2>&1 && pass "npm test" || fail "npm test"
+
+echo "Step 62: No Bootstrap/MUI/Ant/Chakra"
+! grep -q "bootstrap\|@mui\|antd\|chakra" ui/package.json ui/src 2>/dev/null && pass "no forbidden frameworks" || fail "forbidden framework found"
+
+echo "Step 63: shadcn components exist"
+test -f ui/src/components/ui/button.tsx && test -f ui/src/components/ui/card.tsx && pass "shadcn components" || fail "shadcn components missing"
+
 # ── Full Test Suite ───────────────────────────────────────────────
 echo ""
 echo "── Test Suite ──"
 
-echo "Step 58: Run all tests"
+echo "Step 64: Run all tests"
 make test 2>&1 | grep -E "^(ok|FAIL|---)" || true
 make test > /dev/null 2>&1 && pass "all tests pass" || fail "test failures"
 
@@ -491,7 +513,7 @@ echo "================================================"
 
 if [ "$FAIL" -gt 0 ]; then
     echo ""
-    echo "!!! $FAIL TEST(S) FAILED !!!"
+    echo "!!! $FAIL CHECK(S) FAILED !!!"
     exit 1
 fi
 

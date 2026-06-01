@@ -1,3 +1,12 @@
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
 export function AdminPlaceholder() {
-  return <div className="page-card"><h1>Admin</h1><p>Coming soon.</p></div>;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Admin</CardTitle>
+        <CardDescription>Coming soon.</CardDescription>
+      </CardHeader>
+    </Card>
+  );
 }

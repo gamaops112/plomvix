@@ -1,4 +1,6 @@
 import { useTheme } from '../../theme/ThemeContext';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export function TypographyEditor() {
   const { draft, setDraftTheme } = useTheme();
@@ -12,40 +14,37 @@ export function TypographyEditor() {
 
   return (
     <div>
-      <h3>Font Family</h3>
-      <input
+      <h3 className="text-md font-semibold mb-2">Font Family</h3>
+      <Input
         type="text"
         value={typo.font_family}
         onChange={(e) => update('font_family', e.target.value)}
-        className="token-input"
       />
-      <h3>Font Sizes</h3>
-      <div className="token-grid">
+      <h3 className="text-md font-semibold mb-2">Font Sizes</h3>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {(['font_size_xs', 'font_size_sm', 'font_size_base', 'font_size_lg', 'font_size_xl'] as const).map((key) => (
-          <div key={key} className="token-field">
-            <label>{key}</label>
-            <input
+          <div key={key} className="space-y-1">
+            <Label>{key}</Label>
+            <Input
               type="text"
               value={typo[key]}
               onChange={(e) => update(key, e.target.value)}
-              className="token-input"
             />
-            <span className="token-preview" style={{ fontSize: `var(--plx-${key.replace(/_/g, '-')})` }}>
+            <span className="text-xs text-muted-foreground" style={{ fontSize: `var(--plx-${key.replace(/_/g, '-')})` }}>
               Aa
             </span>
           </div>
         ))}
       </div>
-      <h3>Font Weights</h3>
-      <div className="token-grid">
+      <h3 className="text-md font-semibold mb-2">Font Weights</h3>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {(['font_weight_regular', 'font_weight_medium', 'font_weight_semibold', 'font_weight_bold'] as const).map((key) => (
-          <div key={key} className="token-field">
-            <label>{key}</label>
-            <input
+          <div key={key} className="space-y-1">
+            <Label>{key}</Label>
+            <Input
               type="text"
               value={typo[key]}
               onChange={(e) => update(key, e.target.value)}
-              className="token-input"
             />
           </div>
         ))}

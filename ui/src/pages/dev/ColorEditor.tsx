@@ -1,4 +1,5 @@
 import { useTheme } from '../../theme/ThemeContext';
+import { Label } from '@/components/ui/label';
 
 export function ColorEditor() {
   const { draft, setDraftTheme } = useTheme();
@@ -17,13 +18,13 @@ export function ColorEditor() {
   return (
     <div>
       {groups.map((g, gi) => (
-        <div key={g.label} style={{ marginBottom: '1.5rem' }}>
-          <h3>{g.label}</h3>
-          <div className="color-grid">
+        <div key={g.label} className="mb-6">
+          <h3 className="text-md font-semibold mb-2">{g.label}</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {Object.entries(g.colors).map(([key, val]) => (
-              <div key={key} className="color-field">
-                <label>{key}</label>
-                <div className="color-input-row">
+              <div key={key} className="space-y-1">
+                <Label>{key}</Label>
+                <div className="flex items-center gap-2">
                   <input
                     type="color"
                     value={val}
@@ -33,6 +34,7 @@ export function ColorEditor() {
                     type="text"
                     value={val}
                     onChange={(e) => update(gi === 0 ? 'colors' : 'dark_colors', key, e.target.value)}
+                    className="flex-1 h-9 px-3 rounded-md border bg-background text-sm"
                   />
                 </div>
               </div>

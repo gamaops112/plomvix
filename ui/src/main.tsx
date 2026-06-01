@@ -5,7 +5,7 @@ import { AppEventProvider } from './events/AppEventProvider';
 import { App } from './App';
 import { ThemeProvider } from './theme/ThemeContext';
 import { AuthProvider } from './auth/AuthContext';
-import './styles.css';
+import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

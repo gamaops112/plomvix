@@ -1,4 +1,6 @@
 import { useTheme } from '../../theme/ThemeContext';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export function ShadowEditor() {
   const { draft, setDraftTheme } = useTheme();
@@ -14,21 +16,17 @@ export function ShadowEditor() {
   return (
     <div>
       {levels.map((level) => (
-        <div key={level} className="shadow-field">
-          <label>{level}</label>
-          <input
+        <div key={level} className="mb-4 space-y-1">
+          <Label>{level}</Label>
+          <Input
             type="text"
             value={shadows[level]}
             onChange={(e) => update(level, e.target.value)}
-            className="token-input"
           />
           <div
-            className="shadow-preview-card"
+            className="p-4 rounded-md border bg-card"
             style={{
               boxShadow: `var(--plx-shadow-${level})`,
-              padding: '1rem',
-              background: 'var(--plx-color-surface)',
-              borderRadius: 'var(--plx-radius-md)',
               margin: '0.5rem 0',
             }}
           >

@@ -1,0 +1,66 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: var(--plx-color-background, #ffffff);
+  --foreground: var(--plx-color-text, #0f172a);
+  --card: var(--plx-color-surface, #ffffff);
+  --card-foreground: var(--plx-color-text, #0f172a);
+  --popover: var(--plx-color-surface, #ffffff);
+  --popover-foreground: var(--plx-color-text, #0f172a);
+  --primary: var(--plx-color-primary, #2563eb);
+  --primary-foreground: #ffffff;
+  --secondary: var(--plx-color-secondary, #64748b);
+  --secondary-foreground: #ffffff;
+  --muted: var(--plx-color-surface-muted, #f1f5f9);
+  --muted-foreground: var(--plx-color-text-muted, #64748b);
+  --accent: var(--plx-color-accent, #14b8a6);
+  --accent-foreground: #ffffff;
+  --destructive: var(--plx-color-error, #dc2626);
+  --destructive-foreground: #ffffff;
+  --border: var(--plx-color-border, #e2e8f0);
+  --input: var(--plx-color-border, #e2e8f0);
+  --ring: var(--plx-color-primary, #2563eb);
+  --radius: var(--plx-radius-md, 0.5rem);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--plx-font-family, Inter, ui-sans-serif, system-ui, sans-serif);
+}

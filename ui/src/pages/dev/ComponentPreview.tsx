@@ -1,130 +1,78 @@
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+
 export function ComponentPreview() {
   return (
-    <div className="preview-section">
+    <div>
       <h3>Button</h3>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <button className="button button-primary">Primary</button>
-        <button className="button button-secondary">Secondary</button>
-        <button className="button button-ghost">Ghost</button>
+        <Button variant="default">Primary</Button>
+        <Button variant="secondary">Secondary</Button>
+        <Button variant="ghost">Ghost</Button>
       </div>
 
       <h3>Input</h3>
-      <input
-        type="text"
-        placeholder="Sample input"
-        style={{
-          padding: 'var(--plx-spacing-sm)',
-          borderRadius: 'var(--plx-radius-md)',
-          border: '1px solid var(--plx-color-border)',
-          background: 'var(--plx-color-surface)',
-          color: 'var(--plx-color-text)',
-        }}
-      />
+      <Input placeholder="Sample input" />
 
       <h3>Table Row</h3>
-      <table style={{ width: '100%', borderCollapse: 'collapse', margin: '1rem 0' }}>
-        <tbody>
-          <tr style={{ borderBottom: '1px solid var(--plx-color-border)' }}>
-            <td style={{ padding: '0.5rem' }}>Cell 1</td>
-            <td style={{ padding: '0.5rem' }}>Cell 2</td>
-            <td style={{ padding: '0.5rem' }}>Cell 3</td>
-          </tr>
-        </tbody>
-      </table>
+      <Table style={{ margin: '1rem 0' }}>
+        <TableBody>
+          <TableRow>
+            <TableCell>Cell 1</TableCell>
+            <TableCell>Cell 2</TableCell>
+            <TableCell>Cell 3</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
 
       <h3>Card</h3>
-      <div
-        style={{
-          padding: '1.5rem',
-          borderRadius: 'var(--plx-radius-lg)',
-          background: 'var(--plx-color-surface)',
-          border: '1px solid var(--plx-color-border)',
-          boxShadow: 'var(--plx-shadow-sm)',
-        }}
-      >
-        <h4>Card Title</h4>
-        <p style={{ color: 'var(--plx-color-text-muted)' }}>Card content with muted text.</p>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Card Title</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">Card content with muted text.</p>
+        </CardContent>
+      </Card>
 
       <h3>Badge</h3>
       <div style={{ display: 'flex', gap: '0.5rem', margin: '1rem 0' }}>
-        {(['primary', 'success', 'error', 'warning', 'info'] as const).map((v) => (
-          <span
-            key={v}
-            style={{
-              padding: '0.125rem 0.5rem',
-              borderRadius: 'var(--plx-radius-sm)',
-              fontSize: 'var(--plx-font-size-xs)',
-              fontWeight: 500,
-              background: `var(--plx-color-${v})`,
-              color: '#fff',
-            }}
-          >
+        {(['default', 'secondary', 'destructive', 'outline'] as const).map((v) => (
+          <Badge key={v} variant={v}>
             {v}
-          </span>
+          </Badge>
         ))}
       </div>
 
       <h3>Chart Placeholder</h3>
-      <div
-        style={{
-          height: '120px',
-          borderRadius: 'var(--plx-radius-md)',
-          background: 'var(--plx-color-background-muted)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--plx-color-text-muted)',
-          fontSize: 'var(--plx-font-size-sm)',
-        }}
-      >
+      <div className="h-[120px] rounded-md bg-muted flex items-center justify-center text-muted-foreground text-sm">
         Chart Placeholder
       </div>
 
       <h3>Modal Mockup</h3>
-      <div
-        style={{
-          padding: '1.5rem',
-          borderRadius: 'var(--plx-radius-lg)',
-          background: 'var(--plx-color-surface)',
-          border: '1px solid var(--plx-color-border)',
-          boxShadow: 'var(--plx-shadow-lg)',
-          maxWidth: '400px',
-        }}
-      >
-        <h4>Modal Title</h4>
-        <p style={{ color: 'var(--plx-color-text-muted)' }}>This is a modal dialog mockup.</p>
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-          <button className="button button-primary">Confirm</button>
-          <button className="button button-secondary">Cancel</button>
-        </div>
-      </div>
+      <Card className="max-w-[400px]">
+        <CardHeader>
+          <CardTitle>Modal Title</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">This is a modal dialog mockup.</p>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+            <Button variant="default">Confirm</Button>
+            <Button variant="secondary">Cancel</Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <h3>Sidebar Item</h3>
-      <div
-        style={{
-          padding: '0.5rem 0.75rem',
-          borderRadius: 'var(--plx-radius-md)',
-          background: 'var(--plx-color-primary)',
-          color: '#fff',
-          fontSize: 'var(--plx-font-size-sm)',
-          margin: '0.25rem 0',
-        }}
-      >
+      <div className="px-3 py-2 rounded-md text-sm text-primary-foreground bg-primary inline-block my-1">
         Active Sidebar Item
       </div>
 
       <h3>Navbar Item</h3>
-      <div
-        style={{
-          display: 'inline-block',
-          padding: '0.5rem 1rem',
-          borderRadius: 'var(--plx-radius-md)',
-          color: 'var(--plx-color-text)',
-          fontSize: 'var(--plx-font-size-sm)',
-          borderBottom: '2px solid var(--plx-color-primary)',
-        }}
-      >
+      <div className="inline-block px-4 py-2 rounded-md text-sm border-b-2 border-primary">
         Active Nav Item
       </div>
     </div>

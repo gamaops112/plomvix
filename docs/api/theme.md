@@ -62,6 +62,16 @@ The theme is a global design-token document with the following shape:
 - Returns the current saved theme as an indented JSON file
 - Does NOT use the Plomvix response envelope
 
+## Tailwind CSS + shadcn/ui integration (Sprint 13 Patch)
+
+This project uses **Tailwind CSS v4** and **shadcn/ui** for the browser UI.
+
+- `theme.json` remains the authoritative source of design tokens
+- Tailwind/shadcn consume theme through CSS custom properties
+- `--plx-*` variables are mapped to shadcn-compatible variables (`--background`, `--foreground`, `--primary`, `--border`, etc.) via `src/index.css`
+- Light/dark mode toggles the `dark` class on `document.documentElement`
+- Do not edit shadcn component CSS variables manually outside the theme bridge
+
 ## Frontend CSS variable mapping
 
 Theme tokens are injected as CSS variables on `document.documentElement`:

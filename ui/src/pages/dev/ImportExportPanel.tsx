@@ -1,7 +1,8 @@
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppEvents } from '../../events/AppEventProvider';
 import type { Theme } from '../../theme/types';
-import { Button } from '../../components/ui/Button';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 
 export function ImportExportPanel() {
   const { draft, setDraftTheme } = useTheme();
@@ -43,21 +44,21 @@ export function ImportExportPanel() {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div className="flex gap-2 mb-4">
         <Button variant="secondary" onClick={handleExport}>
           Export (Local)
         </Button>
-        <label className="button button-secondary" style={{ cursor: 'pointer' }}>
+        <Label className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 py-2 bg-secondary text-secondary-foreground hover:bg-secondary/80">
           Import
           <input
             type="file"
             accept=".json"
             onChange={handleImport}
-            style={{ display: 'none' }}
+            className="hidden"
           />
-        </label>
+        </Label>
       </div>
-      <p style={{ fontSize: 'var(--plx-font-size-sm)', color: 'var(--plx-color-text-muted)' }}>
+      <p className="text-sm text-muted-foreground">
         Import/export works locally. Backend save/reset requires admin login.
       </p>
     </div>
