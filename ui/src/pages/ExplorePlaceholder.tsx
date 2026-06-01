@@ -1,3 +1,12 @@
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
 export function ExplorePlaceholder() {
-  return <div className="page-card"><h1>Explore</h1><p>Coming soon.</p></div>;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Explore</CardTitle>
+        <CardDescription>Coming soon.</CardDescription>
+      </CardHeader>
+    </Card>
+  );
 }

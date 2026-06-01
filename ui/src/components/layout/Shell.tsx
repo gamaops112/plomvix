@@ -8,17 +8,17 @@ export function Shell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
   return (
-    <div className="shell">
+    <div className="grid h-full" style={{ gridTemplateColumns: 'var(--plx-sidebar-width) 1fr' }}>
       <Sidebar />
-      <div className="shell-content">
-        <header className="shell-header">
+      <div className="flex flex-col overflow-hidden">
+        <header className="flex items-center justify-end gap-4 px-4 py-2 border-b bg-card h-[var(--plx-navbar-height)]">
           <div className="shell-user">
-            {user && <span className="shell-username">{user.username}</span>}
+            {user && <span className="text-sm font-medium text-muted-foreground">{user.username}</span>}
           </div>
           <ThemeModeToggle />
-          <Link to="/logout" className="shell-logout-link">Logout</Link>
+          <Link to="/logout" className="text-sm text-accent hover:underline">Logout</Link>
         </header>
-        <main className="shell-main">{children}</main>
+        <main className="flex-1 overflow-y-auto p-8">{children}</main>
       </div>
     </div>
   );

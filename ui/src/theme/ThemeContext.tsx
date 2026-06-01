@@ -59,6 +59,13 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.Reac
 
   useEffect(() => {
     applyTheme(draft, mode);
+    const root = document.documentElement;
+    if (mode === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    root.dataset.theme = mode;
   }, [draft, mode]);
 
   const setDraftTheme = useCallback((t: Theme) => {

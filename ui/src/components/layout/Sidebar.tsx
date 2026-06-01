@@ -13,15 +13,17 @@ export function Sidebar() {
   });
 
   return (
-    <nav className="sidebar">
-      <div className="sidebar-logo">Plomvix</div>
-      <ul className="sidebar-nav">
+    <nav className="w-[var(--plx-sidebar-width)] bg-card border-r flex flex-col p-4 h-full">
+      <div className="text-xl font-bold pb-6 px-2 text-primary">Plomvix</div>
+      <ul className="list-none flex flex-col gap-1">
         {visible.map((route) => (
           <li key={route.path}>
             <NavLink
               to={route.path}
               className={({ isActive }) =>
-                `sidebar-nav-item${isActive ? ' sidebar-nav-item--active' : ''}`
+                isActive
+                  ? 'block px-3 py-2 rounded-md text-sm bg-primary text-white'
+                  : 'block px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground'
               }
             >
               {route.label}

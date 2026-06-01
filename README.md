@@ -100,11 +100,16 @@ curl http://localhost:8080/health
 
 Plomvix includes a React-based web UI served from `/app/*`.
 
+**UI Stack:** Vite + React 18 + TypeScript + Tailwind CSS v4 + shadcn/ui
+
 ```bash
 make ui-install   # install UI dependencies (first time only)
 make dev          # start Go + Vite together for development
 make build        # build both Go binary and React app for production
 ```
+
+**Pinned dependencies:** The UI project (`ui/`) enforces pinned (exact) dependency versions.
+`npm run check:deps` verifies no `^`, `~`, or `latest` ranges are used.
 
 See [docs/ui.md](docs/ui.md) for details.
 

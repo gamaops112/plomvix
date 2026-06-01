@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { Card, CardContent } from '@/components/ui/card';
 
 export function LogoutPage() {
   const navigate = useNavigate();
@@ -21,8 +22,12 @@ export function LogoutPage() {
   if (!signingOut) return null;
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
-      <p>Signing out…</p>
+    <div className="flex items-center justify-center min-h-screen">
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-muted-foreground">Signing out...</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
