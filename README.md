@@ -96,6 +96,45 @@ curl http://localhost:8080/health
 
 ---
 
+## Web UI
+
+Plomvix includes a React-based web UI served from `/app/*`.
+
+```bash
+make ui-install   # install UI dependencies (first time only)
+make dev          # start Go + Vite together for development
+make build        # build both Go binary and React app for production
+```
+
+See [docs/ui.md](docs/ui.md) for details.
+
+### UI Authentication
+
+The Plomvix browser UI is available at `/login` and `/app/explore`.
+
+- Default credentials: configured via `auth.default_admin_username` and `auth.default_admin_password` in `config.yaml`
+- Login sets an httpOnly `plomvix_token` cookie (not accessible to JavaScript)
+- API clients can continue using JWT bearer tokens (`Authorization: Bearer <token>`) or API keys (`X-API-Key`)
+- **Do not** store JWTs in browser `localStorage` — the httpOnly cookie handles browser sessions automatically
+- `make dev` starts both the Go server and Vite dev server for local development
+
+---
+
+## Theme Engine
+
+Plomvix includes a design-token theme engine backed by `theme.json`.
+
+- **Light/dark mode** — toggle from the UI header
+- **Developer Design Panel** — accessible at `/dev/design` when `dev_panel` is `true` in `theme.json`
+- **Live CSS variable injection** — tokens map to `--plx-*` CSS custom properties
+- **Admin APIs** — `PUT /api/theme`, `POST /api/theme/reset`, `GET /api/theme/export`
+
+See [docs/api/theme.md](docs/api/theme.md) for the full theme API reference.
+
+To disable the design panel in production, set `"dev_panel": false` in `theme.json`.
+
+---
+
 ## Make Commands
 
 | Command | Description |

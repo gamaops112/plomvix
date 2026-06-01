@@ -3,7 +3,6 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/plomvix/plomvix/internal/config"
 	"github.com/plomvix/plomvix/pkg/utils"
@@ -43,11 +42,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := GenerateToken(user, h.cfg)
+	token, claims, err := GenerateTokenWithClaims(user, h.cfg)
 	if err != nil {
 		utils.InternalError(w, r, "failed to generate token")
 		return
 	}
+
+	http.SetCookie(w, NewTokenCookie(token, claims.ExpiresAt.Time, h.cfg))
 
 	utils.OK(w, r, map[string]interface{}{
 		"token":      token,
@@ -57,16 +58,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	_ = RequireUser(r.Context())
-
-	authHeader := r.Header.Get("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	tokenString, source := TokenFromRequest(r)
+	if source != TokenSourceNone {
 		claims, err := ParseToken(tokenString, h.cfg)
 		if err == nil {
 			h.blacklist.Add(claims.JTI, claims.ExpiresAt.Time)
 		}
 	}
+
+	http.SetCookie(w, NewClearTokenCookie(h.cfg))
 
 	utils.OK(w, r, map[string]interface{}{
 		"message": "logged out successfully",
@@ -82,19 +82,20 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	tokenString, source := TokenFromRequest(r)
+	if source != TokenSourceNone {
 		if claims, err := ParseToken(tokenString, h.cfg); err == nil {
 			h.blacklist.Add(claims.JTI, claims.ExpiresAt.Time)
 		}
 	}
 
-	newToken, err := GenerateToken(freshUser, h.cfg)
+	newToken, claims, err := GenerateTokenWithClaims(freshUser, h.cfg)
 	if err != nil {
 		utils.InternalError(w, r, "failed to generate token")
 		return
 	}
+
+	http.SetCookie(w, NewTokenCookie(newToken, claims.ExpiresAt.Time, h.cfg))
 
 	utils.OK(w, r, map[string]interface{}{
 		"token":      newToken,

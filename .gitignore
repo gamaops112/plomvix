@@ -44,3 +44,13 @@ Thumbs.db
 
 # RocksDB local install (dev dependency)
 .rocksdb/
+
+# UI build output and dependencies
+ui/node_modules/
+ui/dist/
+# TypeScript build info
+*.tsbuildinfo
+
+# Generated Vite config (from tsc)
+ui/vite.config.d.ts
+ui/vite.config.js

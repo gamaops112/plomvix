@@ -16,6 +16,8 @@ type Config struct {
 	Indexing    IndexingConfig    `mapstructure:"indexing"`
 	Auth        AuthConfig        `mapstructure:"auth"`
 	Logging     LoggingConfig     `mapstructure:"logging"`
+	UI          UIConfig          `mapstructure:"ui"`
+	Theme       ThemeConfig       `mapstructure:"theme"`
 }
 
 type ServerConfig struct {
@@ -53,6 +55,17 @@ type AuthConfig struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+// UIConfig holds configuration for the web UI.
+type UIConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+	DevMode bool `mapstructure:"dev_mode"`
+}
+
+// ThemeConfig controls the file-backed theme engine.
+type ThemeConfig struct {
+	Path string `mapstructure:"path"`
 }
 
 var (
@@ -174,6 +187,12 @@ func validate(c *Config) error {
 	validFormats := map[string]bool{"json": true, "pretty": true}
 	if !validFormats[c.Logging.Format] {
 		errs = append(errs, fmt.Sprintf(`logging.format must be one of [json pretty], got: %q`, c.Logging.Format))
+	}
+
+	// UI config — no validation needed, booleans default to false safely
+
+	if c.Theme.Path == "" {
+		errs = append(errs, "theme.path must not be empty")
 	}
 
 	if len(errs) > 0 {

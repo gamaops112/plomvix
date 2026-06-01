@@ -1,4 +1,4 @@
-.PHONY: run build test test-verbose vet lint tidy clean coverage help
+.PHONY: run build test test-verbose vet lint tidy clean coverage ui-test integration-test check help
 
 CGO_ENABLED  ?= 1
 export CGO_ENABLED
@@ -21,8 +21,8 @@ LDFLAGS       = -ldflags "$(LD_FLAGS_INNER)"
 run:
 	go run $(LDFLAGS) ./cmd/plomvix
 
-## build: Build the Plomvix binary with version injected
-build:
+## build: Build the Plomvix binary and the React UI
+build: ui-build
 	go build $(LDFLAGS) -o $(BINARY) ./cmd/plomvix
 
 ## test: Run all tests with race detector and coverage
@@ -54,6 +54,29 @@ coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report written to coverage.html"
+
+## ui-install: Install UI npm dependencies
+ui-install:
+	cd ui && npm install
+
+## ui-dev: Start Vite development server on port 3000
+ui-dev:
+	cd ui && npm run dev
+
+## ui-build: Build the React app into ui/dist/
+ui-build:
+	cd ui && npm run build
+
+## ui-test: Run frontend tests
+ui-test:
+	cd ui && npm run test
+
+## integration-test: Run integration tests
+integration-test:
+	export C_INCLUDE_PATH=$(C_INCLUDE_PATH) && export LD_LIBRARY_PATH=$(ROCKSDB_LIBDIR) && CGO_ENABLED=1 go test -race ./tests/integration/...
+
+## check: Run all checks (lint, vet, tests, build)
+check: lint vet test ui-test ui-build
 
 ## help: Show available make commands
 help:

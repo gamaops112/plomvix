@@ -1,5 +1,5 @@
 #!/bin/bash
-# Plomvix Smoke Test — All Sprints (1–9)
+# Plomvix Smoke Test — All Sprints (1–11)
 # Run from project root: bash smoke_test.sh
 
 set -euo pipefail
@@ -24,7 +24,7 @@ pass() { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 
 echo "================================================"
-echo " Plomvix Smoke Test — Sprints 1–9"
+echo " Plomvix Smoke Test — Sprints 1–11"
 echo " $(date)"
 echo "================================================"
 
@@ -419,11 +419,44 @@ echo "Step 49: Admin endpoints require auth"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/admin/stats)
 [ "$STATUS" -eq 401 ] && pass "no auth → 401" || fail "no auth got $STATUS"
 
+# ── SPRINT 11: UI Foundation ──────────────────────────────────────
+echo ""
+echo "── Sprint 11: UI Foundation ──"
+
+echo "Step 50: GET /app"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/app)
+[ "$STATUS" -eq 200 ] && pass "/app → 200" || fail "/app → $STATUS"
+
+echo ""
+echo "Step 51: GET /app/explore"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/app/explore)
+[ "$STATUS" -eq 200 ] && pass "/app/explore → 200" || fail "/app/explore → $STATUS"
+
+echo ""
+echo "Step 52: GET /app/admin"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/app/admin)
+[ "$STATUS" -eq 200 ] && pass "/app/admin → 200" || fail "/app/admin → $STATUS"
+
+echo ""
+echo "Step 53: /health still returns 200 with UI routes added"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+[ "$STATUS" -eq 200 ] && pass "/health → 200" || fail "/health → $STATUS"
+
+echo ""
+echo "Step 54: SPA serves index.html for unknown route"
+RESP=$(curl -sf http://localhost:8080/app/unknown-page)
+echo "$RESP" | grep -q "Plomvix" && pass "/app/unknown-page → SPA fallback" || fail "/app/unknown-page → no SPA fallback"
+
+echo ""
+echo "Step 55: /app returns text/html"
+CONTENT_TYPE=$(curl -s -o /dev/null -w "%{content_type}" http://localhost:8080/app)
+echo "$CONTENT_TYPE" | grep -q "text/html" && pass "Content-Type text/html" || fail "Content-Type $CONTENT_TYPE"
+
 # ── Health Stats ──────────────────────────────────────────────────
 echo ""
 echo "── Health & Stats ──"
 
-echo "Step 50: Health shows total_data_writes > 0"
+echo "Step 56: Health shows total_data_writes > 0"
 HEALTH=$(curl -sf http://localhost:8080/health)
 TOTAL_WRITES=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['hot']['total_data_writes'])")
 WAL_ENTRIES=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['wal']['total_entries'])")
@@ -434,7 +467,7 @@ echo "  WAL entries: $WAL_ENTRIES | Hot writes: $TOTAL_WRITES"
 echo ""
 echo "── Shutdown ──"
 
-echo "Step 51: Graceful shutdown"
+echo "Step 57: Graceful shutdown"
 kill -SIGTERM "$SERVER_PID"
 wait "$SERVER_PID" 2>/dev/null
 SHUTDOWN_CODE=$?
@@ -445,7 +478,7 @@ SERVER_PID=""
 echo ""
 echo "── Test Suite ──"
 
-echo "Step 52: Run all tests"
+echo "Step 58: Run all tests"
 make test 2>&1 | grep -E "^(ok|FAIL|---)" || true
 make test > /dev/null 2>&1 && pass "all tests pass" || fail "test failures"
 
