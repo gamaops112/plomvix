@@ -106,6 +106,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	utils.OK(w, r, map[string]interface{}{
 		"token":      newToken,
+		"user":       freshUser.ToResponse(),
 		"expires_in": h.cfg.Auth.JWTExpirySeconds,
 	})
 }
