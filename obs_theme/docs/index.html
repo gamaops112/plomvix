@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google-site-verification" content="ee762EJV35d8XWPXhgD3uzZTYZMEcpasN6eWIPVojIc" />
+
+  <!-- Primary SEO -->
+  <title>obsAdmin — Free Open-Source Observability Dashboard &amp; Monitoring UI Theme</title>
+  <meta name="description" content="A free, open-source React dashboard for observability and monitoring. Dark &amp; light themes, logs explorer, metrics, traces, APM, alerts, incidents, and synthetics. Built with MUI v9, ECharts, TypeScript. Ready to deploy." />
+  <meta name="keywords" content="observability dashboard, monitoring UI, React dashboard theme, open source observability, MUI theme, dark theme dashboard, logs explorer, metrics dashboard, APM UI, alerting dashboard, ECharts dashboard, free monitoring template, React observability, TypeScript dashboard, Vite dashboard, infrastructure monitoring UI, DevOps dashboard" />
+  <meta name="author" content="obsAdmin" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large" />
+  <link rel="canonical" href="https://gamaops112.github.io/obs_theme/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://gamaops112.github.io/obs_theme/" />
+  <meta property="og:title" content="obsAdmin — Open-Source Observability Dashboard UI Theme" />
+  <meta property="og:description" content="Production-ready React dashboard for monitoring infrastructure. Dark-first theme, 13 page modules, 98 components. Logs, metrics, traces, APM, alerts &amp; more." />
+  <meta property="og:image" content="https://gamaops112.github.io/obs_theme/screenshots/Dashboard.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="obsAdmin" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://gamaops112.github.io/obs_theme/" />
+  <meta name="twitter:title" content="obsAdmin — Open-Source Observability Dashboard" />
+  <meta name="twitter:description" content="Free React dashboard for logs, metrics, traces, APM &amp; alerts. Dark/light theme, MUI v9, ECharts." />
+  <meta name="twitter:image" content="https://gamaops112.github.io/obs_theme/screenshots/Dashboard.png" />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "obsAdmin",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Web",
+    "description": "Open-source observability platform UI built with React, TypeScript, and MUI v9. Includes dashboard, logs explorer, metrics, traces, APM, alerts, incidents, and synthetics monitoring pages.",
+    "url": "https://gamaops112.github.io/obs_theme/",
+    "license": "https://opensource.org/licenses/MIT",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": { "@type": "Organization", "name": "obsAdmin" },
+    "featureList": "Dark/light themes, 13 page modules, log explorer with Monaco editor, metrics dashboard with ECharts, distributed tracing waterfall, alerting & incident management, synthetic monitors, user management, 98 reusable components"
+  }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="app/favicon.svg" />
+
+  <title>obsAdmin — Free Open-Source Observability Dashboard &amp; Monitoring UI Theme</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0a0e14;
+      color: #e8eaf0;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a3147; border-radius: 3px; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 1200px 600px at 30% 20%, rgba(6,182,212,0.12), transparent 60%),
+        radial-gradient(ellipse 800px 500px at 70% 80%, rgba(139,92,246,0.08), transparent 50%),
+        radial-gradient(ellipse 600px 400px at 50% 50%, rgba(16,185,129,0.06), transparent 60%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border: 1px solid rgba(6,182,212,0.25);
+      border-radius: 50px;
+      background: rgba(6,182,212,0.06);
+      font-size: 13px;
+      color: #06b6d4;
+      margin-bottom: 32px;
+      letter-spacing: 0.02em;
+    }
+    .hero-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: #06b6d4; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .hero h1 {
+      font-size: clamp(40px, 8vw, 72px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      position: relative;
+      z-index: 1;
+    }
+    .hero h1 .cyan { color: #06b6d4; }
+    .hero h1 .purple { color: #8b5cf6; }
+    .hero h1 .green { color: #10b981; }
+
+    .hero p {
+      font-size: 18px;
+      color: #8b93a8;
+      max-width: 620px;
+      margin: 24px auto 40px;
+      line-height: 1.7;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #06b6d4, #0891b2);
+      color: #0f1117;
+      box-shadow: 0 0 20px rgba(6,182,212,0.25);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 32px rgba(6,182,212,0.4);
+      transform: translateY(-1px);
+    }
+    .btn-outline {
+      border: 1px solid #2a3147;
+      background: rgba(255,255,255,0.02);
+      color: #e8eaf0;
+    }
+    .btn-outline:hover {
+      border-color: #3d4663;
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* ── STATS BAR ── */
+    .stats {
+      display: flex;
+      gap: 48px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 40px 24px 60px;
+      border-bottom: 1px solid #1f2535;
+    }
+    .stats span {
+      text-align: center;
+    }
+    .stats .num {
+      display: block;
+      font-size: 32px;
+      font-weight: 700;
+      color: #06b6d4;
+      letter-spacing: -0.02em;
+    }
+    .stats .label {
+      font-size: 13px;
+      color: #8b93a8;
+      margin-top: 4px;
+    }
+
+    /* ── SECTIONS ── */
+    section {
+      padding: 80px 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #06b6d4;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .section-desc {
+      font-size: 16px;
+      color: #8b93a8;
+      max-width: 600px;
+      line-height: 1.7;
+    }
+
+    /* ── SCREENSHOT GRID ── */
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+    .screenshot-card {
+      border: 1px solid #1f2535;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #111827;
+      transition: all 0.3s;
+      position: relative;
+    }
+    .screenshot-card:hover {
+      border-color: #06b6d4;
+      box-shadow: 0 8px 32px rgba(6,182,212,0.08);
+      transform: translateY(-2px);
+    }
+    .screenshot-card img {
+      width: 100%;
+      display: block;
+    }
+    .screenshot-card .caption {
+      padding: 14px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #8b93a8;
+      border-top: 1px solid #1f2535;
+    }
+    .screenshot-card .caption strong {
+      color: #e8eaf0;
+    }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 48px;
+    }
+    .feature {
+      padding: 24px;
+      border: 1px solid #1f2535;
+      border-radius: 8px;
+      background: #111827;
+      transition: all 0.25s;
+    }
+    .feature:hover { border-color: #2a3147; }
+    .feature .icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 18px;
+    }
+    .feature .cyan-bg  { background: rgba(6,182,212,0.1); color: #06b6d4; }
+    .feature .purple-bg { background: rgba(139,92,246,0.1); color: #8b5cf6; }
+    .feature .green-bg  { background: rgba(16,185,129,0.1); color: #10b981; }
+    .feature .amber-bg  { background: rgba(245,158,11,0.1); color: #f59e0b; }
+    .feature .red-bg    { background: rgba(239,68,68,0.1); color: #ef4444; }
+    .feature .pink-bg   { background: rgba(236,72,153,0.1); color: #ec4899; }
+
+    .feature h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .feature p  { font-size: 14px; color: #8b93a8; line-height: 1.6; }
+
+    /* ── CTA ── */
+    .cta {
+      text-align: center;
+      padding: 80px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 800px 500px at 50% 50%, rgba(6,182,212,0.08), transparent 70%);
+      pointer-events: none;
+    }
+    .cta h2 { font-size: 32px; font-weight: 700; margin-bottom: 16px; position: relative; }
+    .cta p   { color: #8b93a8; max-width: 480px; margin: 0 auto 32px; font-size: 16px; position: relative; }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 40px 24px;
+      border-top: 1px solid #1f2535;
+      font-size: 13px;
+      color: #4d566b;
+    }
+    footer .cyan-link { color: #06b6d4; text-decoration: none; }
+    footer .cyan-link:hover { text-decoration: underline; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 36px; }
+      .stats { gap: 24px; }
+      section { padding: 48px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════════ HERO ════════════ -->
+  <div class="hero">
+    <div class="hero-badge"><span class="dot"></span> v0.1.0 — Open Source</div>
+    <h1>
+      Monitor everything.<br>
+      <span class="cyan">One dashboard.</span><br>
+      <span class="purple">Zero</span> <span class="green">clutter.</span>
+    </h1>
+    <p>
+      A production-ready React dashboard for observability — logs, metrics, traces, APM,
+      alerts, incidents, and synthetics. Dark-first, light-capable. Built for modern engineering teams.
+    </p>
+    <div class="hero-buttons">
+      <a href="app/index.html" class="btn btn-primary">&#9654; Launch Demo</a>
+      <a href="https://github.com/gamaops112/obs_theme/tree/main/obsAdmin" class="btn btn-outline">&#9733; Star on GitHub</a>
+    </div>
+  </div>
+
+  <!-- ════════════ STATS ════════════ -->
+  <div class="stats">
+    <span><span class="num">13</span><span class="label">Page Modules</span></span>
+    <span><span class="num">98</span><span class="label">Components</span></span>
+    <span><span class="num">2</span><span class="label">Themes</span></span>
+    <span><span class="num">21</span><span class="label">Routes</span></span>
+    <span><span class="num">3</span><span class="label">Density Modes</span></span>
+  </div>
+
+  <!-- ════════════ SCREENSHOTS ════════════ -->
+  <section>
+    <div class="section-label">Screenshots</div>
+    <h2 class="section-title">See it in action</h2>
+    <p class="section-desc">Every page built with precision. Dark-mode optimized, responsive, and ready to deploy.</p>
+    <div class="screenshot-grid">
+      <div class="screenshot-card">
+        <img src="screenshots/Dashboard.png" alt="obsAdmin Dashboard — observability platform with colored metric cards, stat tiles, and time series charts" loading="lazy" />
+        <div class="caption"><strong>Dashboard</strong> — Colored metric cards, stat tiles, time series, service map</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshots/logs.png" alt="obsAdmin Logs Explorer — virtualized log table with histogram, Monaco query editor, and live tail" loading="lazy" />
+        <div class="caption"><strong>Logs Explorer</strong> — Virtualized table, histogram, Monaco editor, live tail</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshots/metrics.png" alt="obsAdmin Metrics — infrastructure monitoring with host tables, CPU progress bars, and metrics explorer" loading="lazy" />
+        <div class="caption"><strong>Metrics &amp; Infrastructure</strong> — Host tables, progress bars, metrics explorer</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshots/traces.png" alt="obsAdmin Traces &amp; APM — span waterfall visualization, service map, and latency percentile charts" loading="lazy" />
+        <div class="caption"><strong>Traces &amp; APM</strong> — Span waterfall, service map, latency percentiles</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshots/alerts.png" alt="obsAdmin Alerts — firing alerts table, alert rules management, and notification channels" loading="lazy" />
+        <div class="caption"><strong>Alerts</strong> — Firing alerts table, alert rules, notification channels</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshots/monitors.png" alt="obsAdmin Synthetics — uptime monitors, status page, and 90-day availability grid" loading="lazy" />
+        <div class="caption"><strong>Synthetics</strong> — Monitors, status page, 90-day uptime grid</div>
+      </div>
+      <div class="screenshot-card">
+        <img src="screenshots/intirgations.png" alt="obsAdmin Integrations — connect Prometheus, Loki, Tempo, Slack, PagerDuty and more" loading="lazy" />
+        <div class="caption"><strong>Integrations</strong> — Connect Prometheus, Loki, Tempo, Slack, PagerDuty</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ FEATURES ════════════ -->
+  <section>
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything you need to observe your stack</h2>
+    <p class="section-desc">Purpose-built components for every observability workflow. No generic dashboards — every page designed for its data.</p>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="icon cyan-bg">&#9670;</div>
+        <h3>Dark &amp; Light Themes</h3>
+        <p>Two complete MUI v9 theme objects. Toggle instantly. Zero hardcoded hex colors — everything responds to theme mode.</p>
+      </div>
+      <div class="feature">
+        <div class="icon purple-bg">&#9830;</div>
+        <h3>ECharts Everywhere</h3>
+        <p>Time series, histograms, service maps, latency percentiles, sparklines. All theme-aware with transparent backgrounds.</p>
+      </div>
+      <div class="feature">
+        <div class="icon green-bg">&#9632;</div>
+        <h3>Virtualized Tables</h3>
+        <p>TanStack Virtual for 100k+ row log streams. Compact 28px rows, inline expansion, live tail with auto-scroll pause.</p>
+      </div>
+      <div class="feature">
+        <div class="icon amber-bg">&#9650;</div>
+        <h3>Monaco Query Editor</h3>
+        <p>Toggle between simple search and full Monaco editor. Syntax highlighting, custom dark/light theme, JetBrains Mono.</p>
+      </div>
+      <div class="feature">
+        <div class="icon red-bg">&#9888;</div>
+        <h3>Alerts &amp; Incidents</h3>
+        <p>Firing alerts, alert rules with inline toggles, incident timeline, severity-colored everything. Silence, acknowledge, resolve.</p>
+      </div>
+      <div class="feature">
+        <div class="icon pink-bg">&#9889;</div>
+        <h3>Global Search &#8984;K</h3>
+        <p>Keyboard-driven modal. Search services, traces, pages. Arrow key navigation. Works everywhere via AppShell listener.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ CTA ════════════ -->
+  <div class="cta">
+    <h2>Ready to explore?</h2>
+    <p>Demo credentials are pre-filled. One click and you're in.</p>
+    <a href="dist/index.html" class="btn btn-primary">&#9654; Launch Demo</a>
+  </div>
+
+  <!-- ════════════ FOOTER ════════════ -->
+  <footer>
+    <p><strong>obsAdmin</strong> &mdash; MIT License &bull; Free &amp; Open Source</p>
+    <p style="margin:8px 0">
+      <a href="https://github.com/gamaops112/obs_theme/tree/main/obsAdmin" class="cyan-link">&#9733; Star on GitHub</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://github.com/gamaops112/obs_theme/tree/main/obsAdmin" class="cyan-link">View Source Code</a>
+      &nbsp;&bull;&nbsp;
+      <a href="app/index.html" class="cyan-link">Launch Demo</a>
+    </p>
+    <p style="margin-top:4px;color:#4d566b">Built with React 19 &bull; MUI v9 &bull; TypeScript &bull; Vite &bull; ECharts</p>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /app/assets/
+
+Sitemap: https://gamaops112.github.io/obs_theme/sitemap.xml
+
+# Crawl-delay: 10

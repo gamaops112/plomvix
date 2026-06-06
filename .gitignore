@@ -48,6 +48,8 @@ Thumbs.db
 # UI build output and dependencies
 ui/node_modules/
 ui/dist/
+obs_theme/node_modules/
+obs_theme/dist/
 # TypeScript build info
 *.tsbuildinfo
 

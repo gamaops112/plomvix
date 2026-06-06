@@ -22,7 +22,7 @@ run:
 	go run $(LDFLAGS) ./cmd/plomvix
 
 ## build: Build the Plomvix binary and the React UI
-build: ui-build
+build: obs-build
 	go build $(LDFLAGS) -o $(BINARY) ./cmd/plomvix
 
 ## test: Run all tests with race detector and coverage
@@ -66,6 +66,14 @@ ui-dev:
 ## ui-build: Build the React app into ui/dist/
 ui-build:
 	cd ui && npm run build
+
+## obs-dev: Start obs_theme Vite dev server on port 3000
+obs-dev:
+	cd obs_theme && npm run dev
+
+## obs-build: Build obs_theme into obs_theme/dist/
+obs-build:
+	cd obs_theme && npm install && npm run build
 
 ## ui-test: Run frontend tests
 ui-test:

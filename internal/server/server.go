@@ -231,16 +231,16 @@ func (s *Server) setupRoutes() {
 			}
 			s.router.Handle("/app", uiProxy)
 			s.router.Handle("/app/*", uiProxy)
-			s.router.Handle("/login", uiProxy)
-			s.router.Handle("/logout", uiProxy)
-			s.router.Handle("/dev/design", uiProxy)
+			s.router.Handle("/login", http.RedirectHandler("/app/login", http.StatusMovedPermanently))
+			s.router.Handle("/logout", http.RedirectHandler("/app/logout", http.StatusMovedPermanently))
+			s.router.Handle("/forgot-password", http.RedirectHandler("/app/forgot-password", http.StatusMovedPermanently))
 		} else {
-			uiHandler := newSPAHandler("ui/dist")
+			uiHandler := newSPAHandler("obs_theme/dist")
 			s.router.Handle("/app", uiHandler)
 			s.router.Handle("/app/*", uiHandler)
-			s.router.Handle("/login", uiHandler)
-			s.router.Handle("/logout", uiHandler)
-			s.router.Handle("/dev/design", uiHandler)
+			s.router.Handle("/login", http.RedirectHandler("/app/login", http.StatusMovedPermanently))
+			s.router.Handle("/logout", http.RedirectHandler("/app/logout", http.StatusMovedPermanently))
+			s.router.Handle("/forgot-password", http.RedirectHandler("/app/forgot-password", http.StatusMovedPermanently))
 		}
 	}
 }
