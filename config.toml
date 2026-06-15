@@ -4,3 +4,8 @@ port = 8080
 
 [data]
 path = "./data"
+
+[logger]
+level = "info"
+format = "text"
+output = "stdout"

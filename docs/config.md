@@ -67,3 +67,82 @@ Configuration is treated as immutable after startup:
 4. Packages must **not mutate** config after startup.
 5. If runtime config changes are needed in the future, they must be designed as
    a separate, explicit feature with clear lifecycle management.
+
+---
+
+## Logger Configuration
+
+The `[logger]` section controls logging behavior.
+
+```toml
+[logger]
+level = "info"
+format = "text"
+output = "stdout"
+```
+
+### Allowed Values
+
+| Field    | Allowed Values                    |
+|----------|-----------------------------------|
+| `level`  | `debug`, `info`, `warn`, `error`  |
+| `format` | `text`, `json`                    |
+| `output` | `stdout`, `stderr`                |
+
+Values are **case-sensitive**. Invalid casing fails validation.
+
+### Format vs Output
+
+These are distinct concepts:
+
+- **level** = how much to log
+- **format** = how logs are encoded
+- **output** = where logs are written
+
+`stdout` is an output, not a format.
+`stderr` is an output, not a format.
+`text` and `json` are formats.
+
+Example — debug text to stdout:
+
+```toml
+[logger]
+level = "debug"
+format = "text"
+output = "stdout"
+```
+
+Example — info JSON to stderr:
+
+```toml
+[logger]
+level = "info"
+format = "json"
+output = "stderr"
+```
+
+### Unsupported Outputs
+
+The following outputs are intentionally **not supported** yet:
+
+- `file` — needs path policy, permissions, rotation, disk-full behavior, and cleanup rules.
+- `discard` — useful for tests but should not be exposed as user config yet.
+- `journald` — needs platform-specific design.
+- `syslog` — needs platform-specific design.
+- `network` — needs retry, backpressure, timeout, and drop policy.
+
+### Limitations
+
+- File output is not supported yet.
+- Log rotation is not supported yet.
+- Environment variable overrides are documented for future use only.
+
+### Future Environment Variables
+
+| Config Field       | Future Env Var              |
+|--------------------|-----------------------------|
+| `logger.level`     | `PLOMVIX_LOGGER_LEVEL`      |
+| `logger.format`    | `PLOMVIX_LOGGER_FORMAT`     |
+| `logger.output`    | `PLOMVIX_LOGGER_OUTPUT`     |
+
+Environment variable overrides are **not implemented yet**.

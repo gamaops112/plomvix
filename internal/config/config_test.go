@@ -41,12 +41,26 @@ func TestDefaultDataPath(t *testing.T) {
 	}
 }
 
+func TestDefaultLoggerValues(t *testing.T) {
+	cfg := config.Default()
+
+	if cfg.Logger.Level != "info" {
+		t.Errorf("default Logger.Level = %q, want %q", cfg.Logger.Level, "info")
+	}
+	if cfg.Logger.Format != "text" {
+		t.Errorf("default Logger.Format = %q, want %q", cfg.Logger.Format, "text")
+	}
+	if cfg.Logger.Output != "stdout" {
+		t.Errorf("default Logger.Output = %q, want %q", cfg.Logger.Output, "stdout")
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
-		name        string
-		modify      func(cfg *config.Config)
-		wantErr     bool
-		wantErrMsg  string
+		name       string
+		modify     func(cfg *config.Config)
+		wantErr    bool
+		wantErrMsg string
 	}{
 		{
 			name:    "default config is valid",
@@ -92,6 +106,39 @@ func TestValidate(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "data.path is required",
+		},
+		{
+			name: "valid logger config",
+			modify: func(cfg *config.Config) {
+				cfg.Logger.Level = "debug"
+				cfg.Logger.Format = "json"
+				cfg.Logger.Output = "stderr"
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid logger level",
+			modify: func(cfg *config.Config) {
+				cfg.Logger.Level = "trace"
+			},
+			wantErr:    true,
+			wantErrMsg: "logger.level must be one of: debug, info, warn, error",
+		},
+		{
+			name: "invalid logger format",
+			modify: func(cfg *config.Config) {
+				cfg.Logger.Format = "console"
+			},
+			wantErr:    true,
+			wantErrMsg: "logger.format must be one of: text, json",
+		},
+		{
+			name: "invalid logger output",
+			modify: func(cfg *config.Config) {
+				cfg.Logger.Output = "file"
+			},
+			wantErr:    true,
+			wantErrMsg: "logger.output must be one of: stdout, stderr",
 		},
 	}
 
@@ -313,5 +360,91 @@ func TestLoadExampleConfigIsValid(t *testing.T) {
 	}
 	if cfg.Data.Path != "data" {
 		t.Errorf("data path = %q, want %q", cfg.Data.Path, "data")
+	}
+}
+
+func TestLoadLoggerSection(t *testing.T) {
+	content := `
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[data]
+path = "./data"
+
+[logger]
+level = "debug"
+format = "json"
+output = "stderr"
+`
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(p)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Logger.Level != "debug" {
+		t.Errorf("logger level = %q, want %q", cfg.Logger.Level, "debug")
+	}
+	if cfg.Logger.Format != "json" {
+		t.Errorf("logger format = %q, want %q", cfg.Logger.Format, "json")
+	}
+	if cfg.Logger.Output != "stderr" {
+		t.Errorf("logger output = %q, want %q", cfg.Logger.Output, "stderr")
+	}
+}
+
+func TestLoadOmittedLoggerSectionPreservesDefaults(t *testing.T) {
+	content := `
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[data]
+path = "./data"
+`
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(p)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Logger.Level != "info" {
+		t.Errorf("logger level = %q, want %q (default preserved)", cfg.Logger.Level, "info")
+	}
+	if cfg.Logger.Format != "text" {
+		t.Errorf("logger format = %q, want %q (default preserved)", cfg.Logger.Format, "text")
+	}
+	if cfg.Logger.Output != "stdout" {
+		t.Errorf("logger output = %q, want %q (default preserved)", cfg.Logger.Output, "stdout")
+	}
+}
+
+func TestLoadUnknownLoggerFieldIsError(t *testing.T) {
+	content := `
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[data]
+path = "./data"
+
+[logger]
+color = true
+`
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := config.Load(p)
+	if err == nil {
+		t.Error("expected error for unknown logger field")
 	}
 }
