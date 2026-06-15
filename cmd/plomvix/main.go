@@ -1,8 +1,21 @@
 // Package main is the entrypoint for the Plomvix database.
 package main
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/plomvix/plomvix/internal/runtime"
+)
 
 func main() {
-	fmt.Println("plomvix starting...")
+	if err := run(context.Background(), runtime.DefaultOptions()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context, opts runtime.Options) error {
+	return runtime.Run(ctx, opts)
 }
