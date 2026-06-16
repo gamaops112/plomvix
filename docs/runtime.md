@@ -59,11 +59,27 @@ foundations compose correctly without inventing fake services.
 
 Runtime defaults to `config.toml`. There are **no CLI flags**, **no environment overrides**, and no multi-path search.
 
+## Signal Handling
+
+The runtime handles OS signals for clean **shutdown timeout**-aware process
+termination via `RunWithSignals`:
+
+- **SIGTERM** — standard process termination (Kubernetes, systemd)
+- **SIGINT** — Ctrl+C from terminal
+- **SIGHUP** — currently treated as shutdown; **SIGHUP is the designated future signal for config reload. config reload is not implemented yet.**
+- **SIGQUIT** — quit signal, treated as shutdown
+
+When a signal is received, the runtime context is cancelled, triggering a clean
+lifecycle shutdown. If shutdown exceeds the configured `ShutdownTimeout`, the
+process does a **force exit** via `main` returning a non-zero exit code.
+
+`RunWithSignals(opts)` is the production entry point. `Run(ctx, opts)` remains
+available for programmatic use without signal handling.
+
 ## Non-Goals
 
 The runtime setup intentionally does not implement:
 
-- signal handling
 - WAL
 - storage
 - query engine
@@ -71,3 +87,4 @@ The runtime setup intentionally does not implement:
 - UI
 - CLI flags
 - environment overrides
+- config reload

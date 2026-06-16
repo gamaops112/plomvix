@@ -2,7 +2,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -10,12 +9,12 @@ import (
 )
 
 func main() {
-	if err := run(context.Background(), runtime.DefaultOptions()); err != nil {
+	if err := run(runtime.DefaultOptions()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, opts runtime.Options) error {
-	return runtime.Run(ctx, opts)
+func run(opts runtime.Options) error {
+	return runtime.RunWithSignals(opts)
 }

@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,6 +46,9 @@ func TestEnterpriseErrors(t *testing.T) {
 	}
 	if runtime.ErrRuntimePanic.Error() != "runtime: panic" {
 		t.Errorf("ErrRuntimePanic = %q", runtime.ErrRuntimePanic.Error())
+	}
+	if runtime.ErrShutdownTimeout.Error() != "runtime: shutdown timeout" {
+		t.Errorf("ErrShutdownTimeout = %q", runtime.ErrShutdownTimeout.Error())
 	}
 }
 
@@ -382,6 +386,15 @@ func TestRuntimeDocumentation(t *testing.T) {
 		"query engine",
 		"API server",
 		"UI",
+		"SIGTERM",
+		"SIGINT",
+		"SIGHUP",
+		"SIGQUIT",
+		"RunWithSignals",
+		"shutdown timeout",
+		"force exit",
+		"SIGHUP is the designated future signal for config reload",
+		"config reload is not implemented yet",
 	}
 	for _, s := range required {
 		if !strings.Contains(content, s) {
@@ -605,5 +618,43 @@ func TestRunNegativeShutdownTimeoutMatchesErrInvalidOptions(t *testing.T) {
 	})
 	if !errors.Is(err, runtime.ErrInvalidOptions) {
 		t.Errorf("error = %v, want ErrInvalidOptions", err)
+	}
+}
+
+func TestErrShutdownTimeoutWrapping(t *testing.T) {
+	wrapped := fmt.Errorf("%w: %w", runtime.ErrStopLifecycle, runtime.ErrShutdownTimeout)
+	if !errors.Is(wrapped, runtime.ErrShutdownTimeout) {
+		t.Fatal("expected ErrShutdownTimeout to be detectable")
+	}
+	if !errors.Is(wrapped, runtime.ErrStopLifecycle) {
+		t.Fatal("expected ErrStopLifecycle to be detectable")
+	}
+}
+
+func TestRunWithSignalsMissingConfig(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "nonexistent.toml")
+	err := runtime.RunWithSignals(runtime.Options{ConfigPath: missingPath})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, runtime.ErrLoadConfig) {
+		t.Errorf("got %v, want ErrLoadConfig", err)
+	}
+}
+
+func TestRunWithSignalsInvalidConfig(t *testing.T) {
+	content := `[server]
+port = 70000
+`
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := runtime.RunWithSignals(runtime.Options{ConfigPath: p})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, runtime.ErrLoadConfig) {
+		t.Errorf("got %v, want ErrLoadConfig", err)
 	}
 }

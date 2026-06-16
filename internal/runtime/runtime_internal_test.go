@@ -1,9 +1,13 @@
 package runtime
 
 import (
+	"context"
 	"errors"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func callWithRuntimeRecover(operation string, fn func()) (err error) {
@@ -63,5 +67,40 @@ func TestRecoverRuntimePanicPreservesExistingError(t *testing.T) {
 	}
 	if !errors.Is(err, existingErr) {
 		t.Errorf("error should still match original: %v", err)
+	}
+}
+
+func TestWithSignalContextReturnsNonNil(t *testing.T) {
+	ctx, cancel := withSignalContext(context.Background())
+	defer cancel()
+	if ctx == nil {
+		t.Error("ctx is nil")
+	}
+	if cancel == nil {
+		t.Error("cancel is nil")
+	}
+}
+
+func TestCancelUnblocksGoroutine(t *testing.T) {
+	ch := make(chan os.Signal, 1)
+	ctx, cancel := withSignalContextFromChan(context.Background(), ch)
+	defer cancel()
+	cancel()
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("context was not cancelled after cleanup")
+	}
+}
+
+func TestSignalDeliveryCancelsContext(t *testing.T) {
+	ch := make(chan os.Signal, 1)
+	ctx, cancel := withSignalContextFromChan(context.Background(), ch)
+	defer cancel()
+	ch <- syscall.SIGINT
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("context was not cancelled after signal")
 	}
 }

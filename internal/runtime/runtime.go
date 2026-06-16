@@ -26,12 +26,13 @@ const DefaultShutdownTimeout = 30 * time.Second
 
 // Enterprise runtime errors for classified error handling.
 var (
-	ErrInvalidOptions = errors.New("runtime: invalid options")
-	ErrLoadConfig     = errors.New("runtime: load config")
-	ErrCreateLogger   = errors.New("runtime: create logger")
-	ErrStartLifecycle = errors.New("runtime: start lifecycle")
-	ErrStopLifecycle  = errors.New("runtime: stop lifecycle")
-	ErrRuntimePanic   = errors.New("runtime: panic")
+	ErrInvalidOptions  = errors.New("runtime: invalid options")
+	ErrLoadConfig      = errors.New("runtime: load config")
+	ErrCreateLogger    = errors.New("runtime: create logger")
+	ErrStartLifecycle  = errors.New("runtime: start lifecycle")
+	ErrStopLifecycle   = errors.New("runtime: stop lifecycle")
+	ErrRuntimePanic    = errors.New("runtime: panic")
+	ErrShutdownTimeout = errors.New("runtime: shutdown timeout")
 )
 
 // Options controls runtime behavior.
@@ -144,6 +145,9 @@ func (r *Runtime) Stop(ctx context.Context) (err error) {
 	defer cancel()
 
 	if err := r.manager.Stop(stopCtx); err != nil {
+		if stopCtx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("%w: %w: %w", ErrStopLifecycle, ErrShutdownTimeout, err)
+		}
 		return fmt.Errorf("%w: %w", ErrStopLifecycle, err)
 	}
 
