@@ -15,6 +15,7 @@ type Config struct {
 	Server ServerConfig `toml:"server"`
 	Data   DataConfig   `toml:"data"`
 	Logger LoggerConfig `toml:"logger"`
+	SQL    SQLConfig    `toml:"sql_engine"`
 }
 
 // ServerConfig holds network-related configuration.
@@ -35,6 +36,16 @@ type LoggerConfig struct {
 	Output string `toml:"output"`
 }
 
+// SQLConfig holds sql_engine configuration.
+type SQLConfig struct {
+	DataDir      string `toml:"data_dir"`
+	Backend      string `toml:"backend"`
+	SyncWrites   bool   `toml:"sync_writes"`
+	ReadOnly     bool   `toml:"read_only"`
+	CacheSizeMB  int    `toml:"cache_size_mb"`
+	MaxOpenFiles int    `toml:"max_open_files"`
+}
+
 // Default returns a Config populated with sensible default values.
 func Default() Config {
 	return Config{
@@ -49,6 +60,11 @@ func Default() Config {
 			Level:  "info",
 			Format: "text",
 			Output: "stdout",
+		},
+		SQL: SQLConfig{
+			DataDir:    "data/sql",
+			Backend:    "bbolt",
+			SyncWrites: true,
 		},
 	}
 }
@@ -73,6 +89,18 @@ func Validate(cfg Config) error {
 	}
 	if !validLoggerOutput(cfg.Logger.Output) {
 		return fmt.Errorf("logger.output must be one of: stdout, stderr")
+	}
+	if cfg.SQL.DataDir == "" {
+		return errors.New("sql_engine data_dir is required")
+	}
+	if cfg.SQL.Backend != "bbolt" && cfg.SQL.Backend != "pebble" {
+		return fmt.Errorf("sql_engine backend must be bbolt or pebble")
+	}
+	if cfg.SQL.CacheSizeMB < 0 {
+		return fmt.Errorf("sql_engine cache_size_mb must be >= 0")
+	}
+	if cfg.SQL.MaxOpenFiles < 0 {
+		return fmt.Errorf("sql_engine max_open_files must be >= 0")
 	}
 	return nil
 }

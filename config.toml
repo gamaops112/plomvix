@@ -9,3 +9,10 @@ path = "./data"
 level = "info"
 format = "text"
 output = "stdout"
+
+[sql_engine]
+data_dir = "data/sql"
+backend  = "bbolt"
+sync_writes = true
+# cache_size_mb = 0
+# max_open_files = 0

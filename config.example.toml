@@ -9,3 +9,7 @@ path = "./data"
 level = "info"
 format = "text"
 output = "stdout"
+
+[sql_engine]
+data_dir = "data/sql"
+backend  = "bbolt"
