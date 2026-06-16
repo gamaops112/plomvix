@@ -47,10 +47,12 @@ var (
 	ErrNotCanonical  = errors.New("key: non-canonical encoding")
 )
 
-func Null() Value  { return Value{kind: KindNull} }
+func Null() Value { return Value{kind: KindNull} }
 func Bool(v bool) Value {
 	b := [1]byte{0}
-	if v { b[0] = 1 }
+	if v {
+		b[0] = 1
+	}
 	return Value{kind: KindBool, b: b[:]}
 }
 func Int64(v int64) Value {
@@ -73,31 +75,45 @@ func Bytes(v []byte) Value {
 func (val Value) Kind() Kind { return val.kind }
 
 func (val Value) AsBool() (bool, bool) {
-	if val.kind != KindBool || len(val.b) != 1 { return false, false }
+	if val.kind != KindBool || len(val.b) != 1 {
+		return false, false
+	}
 	return val.b[0] == 1, true
 }
 func (val Value) AsInt64() (int64, bool) {
-	if val.kind != KindInt64 || len(val.b) < 8 { return 0, false }
+	if val.kind != KindInt64 || len(val.b) < 8 {
+		return 0, false
+	}
 	return int64(binary.BigEndian.Uint64(val.b)), true
 }
 func (val Value) AsUint64() (uint64, bool) {
-	if val.kind != KindUint64 || len(val.b) < 8 { return 0, false }
+	if val.kind != KindUint64 || len(val.b) < 8 {
+		return 0, false
+	}
 	return binary.BigEndian.Uint64(val.b), true
 }
 func (val Value) AsString() (string, bool) {
-	if val.kind != KindString { return "", false }
+	if val.kind != KindString {
+		return "", false
+	}
 	return string(val.b), true
 }
 func (val Value) AsBytes() ([]byte, bool) {
-	if val.kind != KindBytes { return nil, false }
+	if val.kind != KindBytes {
+		return nil, false
+	}
 	b := make([]byte, len(val.b))
 	copy(b, val.b)
 	return b, true
 }
 
 func (val Value) Equal(other Value) bool {
-	if val.kind != other.kind { return false }
-	if val.kind == KindNull { return true }
+	if val.kind != other.kind {
+		return false
+	}
+	if val.kind == KindNull {
+		return true
+	}
 	return string(val.b) == string(other.b)
 }
 
@@ -126,7 +142,9 @@ func encodeValue(val Value) []byte {
 		return out
 	case KindString, KindBytes:
 		tag := byte(0x50)
-		if val.kind == KindBytes { tag = 0x60 }
+		if val.kind == KindBytes {
+			tag = 0x60
+		}
 		var buf []byte
 		buf = append(buf, tag)
 		for _, c := range val.b {
@@ -146,31 +164,51 @@ func encodeValue(val Value) []byte {
 // decodeValue reads one value from the front of b, expecting the given Kind.
 // Returns the Value, number of bytes consumed, and any error.
 func decodeValue(b []byte, expected Kind) (Value, int, error) {
-	if len(b) == 0 { return Value{}, 0, ErrTruncated }
+	if len(b) == 0 {
+		return Value{}, 0, ErrTruncated
+	}
 
 	tag := b[0]
 	// Validate tag matches expected kind
 	switch tag {
 	case 0x10:
-		if expected != KindNull { return Value{}, 0, ErrKindMismatch }
+		if expected != KindNull {
+			return Value{}, 0, ErrKindMismatch
+		}
 		return Null(), 1, nil
 	case 0x20:
-		if expected != KindBool { return Value{}, 0, ErrKindMismatch }
-		if len(b) < 2 { return Value{}, 0, ErrTruncated }
+		if expected != KindBool {
+			return Value{}, 0, ErrKindMismatch
+		}
+		if len(b) < 2 {
+			return Value{}, 0, ErrTruncated
+		}
 		return Bool(b[1] == 1), 2, nil
 	case 0x30:
-		if expected != KindInt64 { return Value{}, 0, ErrKindMismatch }
-		if len(b) < 9 { return Value{}, 0, ErrTruncated }
+		if expected != KindInt64 {
+			return Value{}, 0, ErrKindMismatch
+		}
+		if len(b) < 9 {
+			return Value{}, 0, ErrTruncated
+		}
 		v := binary.BigEndian.Uint64(b[1:9]) ^ 0x8000000000000000
 		return Int64(int64(v)), 9, nil
 	case 0x40:
-		if expected != KindUint64 { return Value{}, 0, ErrKindMismatch }
-		if len(b) < 9 { return Value{}, 0, ErrTruncated }
+		if expected != KindUint64 {
+			return Value{}, 0, ErrKindMismatch
+		}
+		if len(b) < 9 {
+			return Value{}, 0, ErrTruncated
+		}
 		return Uint64(binary.BigEndian.Uint64(b[1:9])), 9, nil
 	case 0x50, 0x60:
 		expKind := KindString
-		if tag == 0x60 { expKind = KindBytes }
-		if expected != expKind { return Value{}, 0, ErrKindMismatch }
+		if tag == 0x60 {
+			expKind = KindBytes
+		}
+		if expected != expKind {
+			return Value{}, 0, ErrKindMismatch
+		}
 		return decodeVarLen(b[1:], expKind)
 	default:
 		return Value{}, 0, ErrBadTypeTag
@@ -183,7 +221,9 @@ func decodeVarLen(b []byte, kind Kind) (Value, int, error) {
 	i := 0
 	for i < len(b) {
 		if b[i] == 0x00 {
-			if i+1 >= len(b) { return Value{}, 0, ErrTruncated }
+			if i+1 >= len(b) {
+				return Value{}, 0, ErrTruncated
+			}
 			switch b[i+1] {
 			case 0xFF:
 				raw = append(raw, 0x00)
@@ -208,7 +248,9 @@ func decodeVarLen(b []byte, kind Kind) (Value, int, error) {
 
 // EncodeTableRowKey builds [0x01][tableID][encoded pk][version].
 func EncodeTableRowKey(tableID uint64, pk []Value, version uint64) ([]byte, error) {
-	if len(pk) == 0 { return nil, ErrNoPKColumns }
+	if len(pk) == 0 {
+		return nil, ErrNoPKColumns
+	}
 	var buf []byte
 	buf = append(buf, TagTableData)
 	buf = append(buf, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -225,24 +267,40 @@ func EncodeTableRowKey(tableID uint64, pk []Value, version uint64) ([]byte, erro
 // DecodeTableRowKey parses a row key. expectedKinds supplies the PK column
 // types from the table schema.
 func DecodeTableRowKey(b []byte, expectedKinds []Kind) (tableID uint64, pk []Value, version uint64, err error) {
-	if len(b) == 0 { return 0, nil, 0, ErrEmptyKey }
-	if len(expectedKinds) == 0 { return 0, nil, 0, ErrNoPKColumns }
-	if b[0] != TagTableData { return 0, nil, 0, ErrBadTag }
-	if len(b) < 9 { return 0, nil, 0, ErrTruncated }
+	if len(b) == 0 {
+		return 0, nil, 0, ErrEmptyKey
+	}
+	if len(expectedKinds) == 0 {
+		return 0, nil, 0, ErrNoPKColumns
+	}
+	if b[0] != TagTableData {
+		return 0, nil, 0, ErrBadTag
+	}
+	if len(b) < 9 {
+		return 0, nil, 0, ErrTruncated
+	}
 	tableID = binary.BigEndian.Uint64(b[1:9])
 	pos := 9
 	pk = make([]Value, 0, len(expectedKinds))
 	for _, kind := range expectedKinds {
-		if pos >= len(b) { return 0, nil, 0, ErrTruncated }
+		if pos >= len(b) {
+			return 0, nil, 0, ErrTruncated
+		}
 		val, consumed, decErr := decodeValue(b[pos:], kind)
-		if decErr != nil { return 0, nil, 0, decErr }
+		if decErr != nil {
+			return 0, nil, 0, decErr
+		}
 		pk = append(pk, val)
 		pos += consumed
 	}
-	if len(b)-pos < 8 { return 0, nil, 0, ErrTruncated }
+	if len(b)-pos < 8 {
+		return 0, nil, 0, ErrTruncated
+	}
 	version = ^binary.BigEndian.Uint64(b[pos:])
 	pos += 8
-	if pos != len(b) { return 0, nil, 0, ErrTrailingBytes }
+	if pos != len(b) {
+		return 0, nil, 0, ErrTrailingBytes
+	}
 	return tableID, pk, version, nil
 }
 

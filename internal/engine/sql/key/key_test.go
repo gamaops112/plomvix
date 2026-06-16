@@ -10,58 +10,104 @@ import (
 )
 
 func TestTagConstants(t *testing.T) {
-	if TagTableData != 0x01 { t.Errorf("TagTableData = %#x, want 0x01", TagTableData) }
-	if TagMetadata != 0x02  { t.Errorf("TagMetadata = %#x, want 0x02", TagMetadata) }
-	if TagIndex != 0x03     { t.Errorf("TagIndex = %#x, want 0x03", TagIndex) }
+	if TagTableData != 0x01 {
+		t.Errorf("TagTableData = %#x, want 0x01", TagTableData)
+	}
+	if TagMetadata != 0x02 {
+		t.Errorf("TagMetadata = %#x, want 0x02", TagMetadata)
+	}
+	if TagIndex != 0x03 {
+		t.Errorf("TagIndex = %#x, want 0x03", TagIndex)
+	}
 }
 
 func TestKindConstants(t *testing.T) {
-	if KindNull != 0   { t.Errorf("KindNull = %d, want 0", KindNull) }
-	if KindBool != 1   { t.Errorf("KindBool = %d, want 1", KindBool) }
-	if KindInt64 != 2  { t.Errorf("KindInt64 = %d, want 2", KindInt64) }
-	if KindUint64 != 3 { t.Errorf("KindUint64 = %d, want 3", KindUint64) }
-	if KindString != 4 { t.Errorf("KindString = %d, want 4", KindString) }
-	if KindBytes != 5  { t.Errorf("KindBytes = %d, want 5", KindBytes) }
+	if KindNull != 0 {
+		t.Errorf("KindNull = %d, want 0", KindNull)
+	}
+	if KindBool != 1 {
+		t.Errorf("KindBool = %d, want 1", KindBool)
+	}
+	if KindInt64 != 2 {
+		t.Errorf("KindInt64 = %d, want 2", KindInt64)
+	}
+	if KindUint64 != 3 {
+		t.Errorf("KindUint64 = %d, want 3", KindUint64)
+	}
+	if KindString != 4 {
+		t.Errorf("KindString = %d, want 4", KindString)
+	}
+	if KindBytes != 5 {
+		t.Errorf("KindBytes = %d, want 5", KindBytes)
+	}
 }
 
 func TestValueConstructorsAndAccessors(t *testing.T) {
 	t.Run("Null", func(t *testing.T) {
-		if Null().Kind() != KindNull { t.Error("kind mismatch") }
+		if Null().Kind() != KindNull {
+			t.Error("kind mismatch")
+		}
 	})
 	t.Run("Bool", func(t *testing.T) {
 		b, ok := Bool(true).AsBool()
-		if !ok || !b { t.Errorf("AsBool = (%v,%v)", b, ok) }
+		if !ok || !b {
+			t.Errorf("AsBool = (%v,%v)", b, ok)
+		}
 		b, ok = Bool(false).AsBool()
-		if !ok || b { t.Errorf("AsBool = (%v,%v)", b, ok) }
+		if !ok || b {
+			t.Errorf("AsBool = (%v,%v)", b, ok)
+		}
 	})
 	t.Run("Int64", func(t *testing.T) {
 		n, ok := Int64(-42).AsInt64()
-		if !ok || n != -42 { t.Errorf("AsInt64 = (%d,%v)", n, ok) }
+		if !ok || n != -42 {
+			t.Errorf("AsInt64 = (%d,%v)", n, ok)
+		}
 	})
 	t.Run("Uint64", func(t *testing.T) {
 		n, ok := Uint64(42).AsUint64()
-		if !ok || n != 42 { t.Errorf("AsUint64 = (%d,%v)", n, ok) }
+		if !ok || n != 42 {
+			t.Errorf("AsUint64 = (%d,%v)", n, ok)
+		}
 	})
 	t.Run("String", func(t *testing.T) {
 		s, ok := String("hello").AsString()
-		if !ok || s != "hello" { t.Errorf("AsString = (%q,%v)", s, ok) }
+		if !ok || s != "hello" {
+			t.Errorf("AsString = (%q,%v)", s, ok)
+		}
 	})
 	t.Run("Bytes", func(t *testing.T) {
-		b, ok := Bytes([]byte{1,2,3}).AsBytes()
-		if !ok || string(b) != "\x01\x02\x03" { t.Errorf("AsBytes = (%v,%v)", b, ok) }
+		b, ok := Bytes([]byte{1, 2, 3}).AsBytes()
+		if !ok || string(b) != "\x01\x02\x03" {
+			t.Errorf("AsBytes = (%v,%v)", b, ok)
+		}
 	})
 	t.Run("wrong kind returns false", func(t *testing.T) {
-		if _, ok := Int64(1).AsBool(); ok { t.Error("Int64.AsBool should return false") }
-		if _, ok := String("x").AsInt64(); ok { t.Error("String.AsInt64 should return false") }
+		if _, ok := Int64(1).AsBool(); ok {
+			t.Error("Int64.AsBool should return false")
+		}
+		if _, ok := String("x").AsInt64(); ok {
+			t.Error("String.AsInt64 should return false")
+		}
 	})
 }
 
 func TestValueEqual(t *testing.T) {
-	if !Int64(5).Equal(Int64(5)) { t.Error("Int64(5) == Int64(5)") }
-	if Int64(5).Equal(Int64(6))  { t.Error("Int64(5) != Int64(6)") }
-	if Int64(0).Equal(Uint64(0)) { t.Error("different kinds") }
-	if !Null().Equal(Null())     { t.Error("Null == Null") }
-	if !String("x").Equal(String("x")) { t.Error("String(x) == String(x)") }
+	if !Int64(5).Equal(Int64(5)) {
+		t.Error("Int64(5) == Int64(5)")
+	}
+	if Int64(5).Equal(Int64(6)) {
+		t.Error("Int64(5) != Int64(6)")
+	}
+	if Int64(0).Equal(Uint64(0)) {
+		t.Error("different kinds")
+	}
+	if !Null().Equal(Null()) {
+		t.Error("Null == Null")
+	}
+	if !String("x").Equal(String("x")) {
+		t.Error("String(x) == String(x)")
+	}
 }
 
 func TestValueBytesMutationSafety(t *testing.T) {
@@ -69,11 +115,15 @@ func TestValueBytesMutationSafety(t *testing.T) {
 	v := Bytes(orig)
 	orig[0] = 99
 	b, _ := v.AsBytes()
-	if b[0] != 1 { t.Error("Bytes constructor must copy input") }
+	if b[0] != 1 {
+		t.Error("Bytes constructor must copy input")
+	}
 	b2, _ := v.AsBytes()
 	b2[0] = 99
 	b3, _ := v.AsBytes()
-	if b3[0] != 1 { t.Error("AsBytes must return a copy") }
+	if b3[0] != 1 {
+		t.Error("AsBytes must return a copy")
+	}
 }
 
 func TestEncodeDecodeRoundTrip(t *testing.T) {
@@ -168,7 +218,9 @@ func TestEncodeTableRowKeyWorkedExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	// keyspace tag
-	if key[0] != 0x01 { t.Errorf("tag = %x", key[0]) }
+	if key[0] != 0x01 {
+		t.Errorf("tag = %x", key[0])
+	}
 	// tableID big-endian
 	expectedTableID := []byte{0, 0, 0, 0, 0, 0, 0, 7}
 	if !bytes.Equal(key[1:9], expectedTableID) {
@@ -190,8 +242,12 @@ func TestEncodeTableRowKeyEmptyPK(t *testing.T) {
 
 func TestTablePrefix(t *testing.T) {
 	p := TablePrefix(42)
-	if p[0] != 0x01 { t.Errorf("tag = %x", p[0]) }
-	if binary.BigEndian.Uint64(p[1:]) != 42 { t.Error("tableID mismatch") }
+	if p[0] != 0x01 {
+		t.Errorf("tag = %x", p[0])
+	}
+	if binary.BigEndian.Uint64(p[1:]) != 42 {
+		t.Error("tableID mismatch")
+	}
 }
 
 func TestDecodeTableRowKeyFullRoundTrip(t *testing.T) {
@@ -206,7 +262,7 @@ func TestDecodeTableRowKeyFullRoundTrip(t *testing.T) {
 		{"single bool", 3, []Value{Bool(true)}, []Kind{KindBool}, 0},
 		{"single int64", 5, []Value{Int64(-100)}, []Kind{KindInt64}, 1},
 		{"single uint64", 7, []Value{Uint64(999)}, []Kind{KindUint64}, 100},
-		{"single string", 9, []Value{String("hello")}, []Kind{KindString}, 1<<63},
+		{"single string", 9, []Value{String("hello")}, []Kind{KindString}, 1 << 63},
 		{"single bytes", 11, []Value{Bytes([]byte{0, 1, 0})}, []Kind{KindBytes}, 0},
 		{"composite 2", 13, []Value{Int64(1), String("x")}, []Kind{KindInt64, KindString}, 5},
 		{"composite 3", 15, []Value{Int64(1), String("ab"), Bytes([]byte{0})}, []Kind{KindInt64, KindString, KindBytes}, 999},
@@ -281,52 +337,72 @@ func TestFullKeyOrdering(t *testing.T) {
 func TestErrorPaths(t *testing.T) {
 	t.Run("empty input", func(t *testing.T) {
 		_, _, _, err := DecodeTableRowKey(nil, []Kind{KindInt64})
-		if !errors.Is(err, ErrEmptyKey) { t.Errorf("want ErrEmptyKey, got %v", err) }
+		if !errors.Is(err, ErrEmptyKey) {
+			t.Errorf("want ErrEmptyKey, got %v", err)
+		}
 	})
 	t.Run("bad keyspace tag", func(t *testing.T) {
-		_, _, _, err := DecodeTableRowKey([]byte{0xFF, 0,0,0,0,0,0,0,5, 0x30, 0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,0}, []Kind{KindInt64})
-		if !errors.Is(err, ErrBadTag) { t.Errorf("want ErrBadTag, got %v", err) }
+		_, _, _, err := DecodeTableRowKey([]byte{0xFF, 0, 0, 0, 0, 0, 0, 0, 5, 0x30, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}, []Kind{KindInt64})
+		if !errors.Is(err, ErrBadTag) {
+			t.Errorf("want ErrBadTag, got %v", err)
+		}
 	})
 	t.Run("empty expectedKinds", func(t *testing.T) {
 		_, _, _, err := DecodeTableRowKey([]byte{0x01}, nil)
-		if !errors.Is(err, ErrNoPKColumns) { t.Errorf("want ErrNoPKColumns, got %v", err) }
+		if !errors.Is(err, ErrNoPKColumns) {
+			t.Errorf("want ErrNoPKColumns, got %v", err)
+		}
 	})
 	t.Run("truncated tableID", func(t *testing.T) {
-		_, _, _, err := DecodeTableRowKey([]byte{0x01, 0,0,0}, []Kind{KindInt64})
-		if !errors.Is(err, ErrTruncated) { t.Errorf("want ErrTruncated, got %v", err) }
+		_, _, _, err := DecodeTableRowKey([]byte{0x01, 0, 0, 0}, []Kind{KindInt64})
+		if !errors.Is(err, ErrTruncated) {
+			t.Errorf("want ErrTruncated, got %v", err)
+		}
 	})
 	t.Run("kind mismatch", func(t *testing.T) {
 		k, _ := EncodeTableRowKey(1, []Value{Int64(5)}, 0)
 		_, _, _, err := DecodeTableRowKey(k, []Kind{KindString})
-		if !errors.Is(err, ErrKindMismatch) { t.Errorf("want ErrKindMismatch, got %v", err) }
+		if !errors.Is(err, ErrKindMismatch) {
+			t.Errorf("want ErrKindMismatch, got %v", err)
+		}
 	})
 	t.Run("unknown type tag", func(t *testing.T) {
-		b := []byte{0x01, 0,0,0,0,0,0,0,1, 0x99, 0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,0}
+		b := []byte{0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0x99, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}
 		_, _, _, err := DecodeTableRowKey(b, []Kind{KindInt64})
-		if !errors.Is(err, ErrBadTypeTag) { t.Errorf("want ErrBadTypeTag, got %v", err) }
+		if !errors.Is(err, ErrBadTypeTag) {
+			t.Errorf("want ErrBadTypeTag, got %v", err)
+		}
 	})
 	t.Run("truncated variable length", func(t *testing.T) {
 		k, _ := EncodeTableRowKey(1, []Value{String("hello")}, 0)
 		trunc := k[:len(k)-5]
 		_, _, _, err := DecodeTableRowKey(trunc, []Kind{KindString})
-		if !errors.Is(err, ErrTruncated) { t.Errorf("want ErrTruncated, got %v", err) }
+		if !errors.Is(err, ErrTruncated) {
+			t.Errorf("want ErrTruncated, got %v", err)
+		}
 	})
 	t.Run("bad field", func(t *testing.T) {
-		b := []byte{0x01, 0,0,0,0,0,0,0,1, 0x50, 0x00, 0x02, 0,0,0,0,0,0,0,0}
+		b := []byte{0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0x50, 0x00, 0x02, 0, 0, 0, 0, 0, 0, 0, 0}
 		_, _, _, err := DecodeTableRowKey(b, []Kind{KindString})
-		if !errors.Is(err, ErrBadField) { t.Errorf("want ErrBadField, got %v", err) }
+		if !errors.Is(err, ErrBadField) {
+			t.Errorf("want ErrBadField, got %v", err)
+		}
 	})
 	t.Run("truncated version", func(t *testing.T) {
 		k, _ := EncodeTableRowKey(1, []Value{Int64(5)}, 0)
 		trunc := k[:len(k)-5]
 		_, _, _, err := DecodeTableRowKey(trunc, []Kind{KindInt64})
-		if !errors.Is(err, ErrTruncated) { t.Errorf("want ErrTruncated, got %v", err) }
+		if !errors.Is(err, ErrTruncated) {
+			t.Errorf("want ErrTruncated, got %v", err)
+		}
 	})
 	t.Run("trailing bytes", func(t *testing.T) {
 		k, _ := EncodeTableRowKey(1, []Value{Int64(5)}, 0)
 		k = append(k, 0x99)
 		_, _, _, err := DecodeTableRowKey(k, []Kind{KindInt64})
-		if !errors.Is(err, ErrTrailingBytes) { t.Errorf("want ErrTrailingBytes, got %v", err) }
+		if !errors.Is(err, ErrTrailingBytes) {
+			t.Errorf("want ErrTrailingBytes, got %v", err)
+		}
 	})
 }
 
@@ -353,24 +429,38 @@ func TestRandomizedRoundTrip(t *testing.T) {
 			case KindString:
 				n := rng.Intn(16)
 				b := make([]byte, n)
-				for x := 0; x < n; x++ { b[x] = byte(rng.Intn(256)) }
+				for x := 0; x < n; x++ {
+					b[x] = byte(rng.Intn(256))
+				}
 				pk[j] = String(string(b))
 			case KindBytes:
 				n := rng.Intn(16)
 				b := make([]byte, n)
-				for x := 0; x < n; x++ { b[x] = byte(rng.Intn(256)) }
+				for x := 0; x < n; x++ {
+					b[x] = byte(rng.Intn(256))
+				}
 				pk[j] = Bytes(b)
 			}
 		}
 		version := rng.Uint64()
 		key, err := EncodeTableRowKey(tableID, pk, version)
-		if err != nil { t.Fatalf("EncodeTableRowKey: %v", err) }
+		if err != nil {
+			t.Fatalf("EncodeTableRowKey: %v", err)
+		}
 		id, decPK, ver, err := DecodeTableRowKey(key, expectedKinds)
-		if err != nil { t.Fatalf("DecodeTableRowKey: %v", err) }
-		if id != tableID { t.Errorf("tableID mismatch") }
-		if ver != version { t.Errorf("version mismatch") }
+		if err != nil {
+			t.Fatalf("DecodeTableRowKey: %v", err)
+		}
+		if id != tableID {
+			t.Errorf("tableID mismatch")
+		}
+		if ver != version {
+			t.Errorf("version mismatch")
+		}
 		for j := range pk {
-			if !decPK[j].Equal(pk[j]) { t.Errorf("pk[%d] mismatch", j) }
+			if !decPK[j].Equal(pk[j]) {
+				t.Errorf("pk[%d] mismatch", j)
+			}
 		}
 	}
 }
@@ -388,13 +478,15 @@ func TestIsCanonicalValidKeys(t *testing.T) {
 		{"int64", 3, []Value{Int64(-42)}, []Kind{KindInt64}, 5},
 		{"uint64", 4, []Value{Uint64(999)}, []Kind{KindUint64}, 10},
 		{"string", 5, []Value{String("hello")}, []Kind{KindString}, 100},
-		{"bytes", 6, []Value{Bytes([]byte{0,1,0})}, []Kind{KindBytes}, 0},
+		{"bytes", 6, []Value{Bytes([]byte{0, 1, 0})}, []Kind{KindBytes}, 0},
 		{"composite", 7, []Value{Int64(1), String("x")}, []Kind{KindInt64, KindString}, 50},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			key, err := EncodeTableRowKey(tt.id, tt.pk, tt.ver)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			ok, err := IsCanonical(key, tt.kind)
 			if !ok || err != nil {
 				t.Errorf("IsCanonical = (%v, %v), want (true, nil)", ok, err)
@@ -405,22 +497,34 @@ func TestIsCanonicalValidKeys(t *testing.T) {
 
 func TestIsCanonicalMalformed(t *testing.T) {
 	t.Run("truncated", func(t *testing.T) {
-		ok, err := IsCanonical([]byte{0x01, 0,0}, []Kind{KindInt64})
-		if ok { t.Error("expected false for truncated") }
-		if !errors.Is(err, ErrTruncated) { t.Errorf("want ErrTruncated, got %v", err) }
+		ok, err := IsCanonical([]byte{0x01, 0, 0}, []Kind{KindInt64})
+		if ok {
+			t.Error("expected false for truncated")
+		}
+		if !errors.Is(err, ErrTruncated) {
+			t.Errorf("want ErrTruncated, got %v", err)
+		}
 	})
 	t.Run("bad tag", func(t *testing.T) {
-		ok, err := IsCanonical([]byte{0xFF, 0,0,0,0,0,0,0,1,
-			0x30, 0,0,0,0,0,0,0,1,
-			0,0,0,0,0,0,0,0}, []Kind{KindInt64})
-		if ok { t.Error("expected false") }
-		if !errors.Is(err, ErrBadTag) { t.Errorf("want ErrBadTag, got %v", err) }
+		ok, err := IsCanonical([]byte{0xFF, 0, 0, 0, 0, 0, 0, 0, 1,
+			0x30, 0, 0, 0, 0, 0, 0, 0, 1,
+			0, 0, 0, 0, 0, 0, 0, 0}, []Kind{KindInt64})
+		if ok {
+			t.Error("expected false")
+		}
+		if !errors.Is(err, ErrBadTag) {
+			t.Errorf("want ErrBadTag, got %v", err)
+		}
 	})
 	t.Run("bad field", func(t *testing.T) {
-		b := []byte{0x01, 0,0,0,0,0,0,0,1, 0x50, 0x00, 0x02, 0,0,0,0,0,0,0,0}
+		b := []byte{0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0x50, 0x00, 0x02, 0, 0, 0, 0, 0, 0, 0, 0}
 		ok, err := IsCanonical(b, []Kind{KindString})
-		if ok { t.Error("expected false") }
-		if !errors.Is(err, ErrBadField) { t.Errorf("want ErrBadField, got %v", err) }
+		if ok {
+			t.Error("expected false")
+		}
+		if !errors.Is(err, ErrBadField) {
+			t.Errorf("want ErrBadField, got %v", err)
+		}
 	})
 }
 
@@ -428,7 +532,9 @@ func TestExhaustiveMalformedKeys(t *testing.T) {
 	// validEncode produces a valid int64-key for tableID 1, version 0.
 	mustKey := func() []byte {
 		k, err := EncodeTableRowKey(1, []Value{Int64(5)}, 0)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		return k
 	}
 
@@ -449,27 +555,29 @@ func TestExhaustiveMalformedKeys(t *testing.T) {
 		{name: "expectedKinds empty", input: mustKey(), kinds: []Kind{}, wantErr: ErrNoPKColumns},
 		{name: "tableID truncated len 0", input: []byte{0x01}, kinds: []Kind{KindInt64}, wantErr: ErrTruncated},
 		{name: "tableID truncated len 2", input: []byte{0x01, 0, 0}, kinds: []Kind{KindInt64}, wantErr: ErrTruncated},
-		{name: "tableID truncated len 7", input: []byte{0x01, 0,0,0,0,0,0,0}, kinds: []Kind{KindInt64}, wantErr: ErrTruncated},
+		{name: "tableID truncated len 7", input: []byte{0x01, 0, 0, 0, 0, 0, 0, 0}, kinds: []Kind{KindInt64}, wantErr: ErrTruncated},
 		{name: "kind mismatch string for int64", input: mustKey(), kinds: []Kind{KindString}, wantErr: ErrKindMismatch},
 		{name: "kind mismatch bool for int64", input: mustKey(), kinds: []Kind{KindBool}, wantErr: ErrKindMismatch},
 		{name: "kind mismatch null for int64", input: mustKey(), kinds: []Kind{KindNull}, wantErr: ErrKindMismatch},
-		{name: "unknown type tag", input: []byte{0x01, 0,0,0,0,0,0,0,1, 0x99, 0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,0}, kinds: []Kind{KindInt64}, wantErr: ErrBadTypeTag},
+		{name: "unknown type tag", input: []byte{0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0x99, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}, kinds: []Kind{KindInt64}, wantErr: ErrBadTypeTag},
 		{name: "varfield no terminator", input: func() []byte {
 			k, _ := EncodeTableRowKey(1, []Value{String("hello")}, 0)
 			return k[:len(k)-5]
 		}(), kinds: []Kind{KindString}, wantErr: ErrTruncated},
-		{name: "varfield trailing lone 0x00", input: []byte{0x01, 0,0,0,0,0,0,0,1, 0x50, 0x61, 0x00}, kinds: []Kind{KindString}, wantErr: ErrTruncated},
-		{name: "varfield bad escape 0x00 0x02", input: []byte{0x01, 0,0,0,0,0,0,0,1, 0x50, 0x00, 0x02, 0,0,0,0,0,0,0,0}, kinds: []Kind{KindString}, wantErr: ErrBadField},
+		{name: "varfield trailing lone 0x00", input: []byte{0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0x50, 0x61, 0x00}, kinds: []Kind{KindString}, wantErr: ErrTruncated},
+		{name: "varfield bad escape 0x00 0x02", input: []byte{0x01, 0, 0, 0, 0, 0, 0, 0, 1, 0x50, 0x00, 0x02, 0, 0, 0, 0, 0, 0, 0, 0}, kinds: []Kind{KindString}, wantErr: ErrBadField},
 		{name: "version truncated len 0", input: mustKey()[:len(mustKey())-8], kinds: []Kind{KindInt64}, wantErr: ErrTruncated},
 		{name: "version truncated len 4", input: mustKey()[:len(mustKey())-4], kinds: []Kind{KindInt64}, wantErr: ErrTruncated},
 		{name: "trailing 1 byte", input: append(mustKey(), 0x99), kinds: []Kind{KindInt64}, wantErr: ErrTrailingBytes},
-		{name: "trailing 8 bytes", input: append(mustKey(), 0,0,0,0,0,0,0,0), kinds: []Kind{KindInt64}, wantErr: ErrTrailingBytes},
+		{name: "trailing 8 bytes", input: append(mustKey(), 0, 0, 0, 0, 0, 0, 0, 0), kinds: []Kind{KindInt64}, wantErr: ErrTrailingBytes},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, _, _, err := DecodeTableRowKey(tt.input, tt.kinds)
-			if err == nil { t.Fatal("expected error") }
+			if err == nil {
+				t.Fatal("expected error")
+			}
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("error = %v, want error matching %v", err, tt.wantErr)
 			}
@@ -479,37 +587,57 @@ func TestExhaustiveMalformedKeys(t *testing.T) {
 
 func TestPrefixEnd(t *testing.T) {
 	t.Run("empty returns nil", func(t *testing.T) {
-		if PrefixEnd(nil) != nil { t.Error("nil input should return nil") }
-		if PrefixEnd([]byte{}) != nil { t.Error("empty input should return nil") }
+		if PrefixEnd(nil) != nil {
+			t.Error("nil input should return nil")
+		}
+		if PrefixEnd([]byte{}) != nil {
+			t.Error("empty input should return nil")
+		}
 	})
 	t.Run("all 0xFF returns nil", func(t *testing.T) {
-		if PrefixEnd([]byte{0xFF, 0xFF}) != nil { t.Error("all 0xFF should return nil") }
+		if PrefixEnd([]byte{0xFF, 0xFF}) != nil {
+			t.Error("all 0xFF should return nil")
+		}
 	})
 	t.Run("simple increment", func(t *testing.T) {
 		got := PrefixEnd([]byte{0x01, 0x00, 0x02})
 		want := []byte{0x01, 0x00, 0x03}
-		if !bytes.Equal(got, want) { t.Errorf("got %x, want %x", got, want) }
+		if !bytes.Equal(got, want) {
+			t.Errorf("got %x, want %x", got, want)
+		}
 	})
 	t.Run("carry", func(t *testing.T) {
 		got := PrefixEnd([]byte{0x01, 0xFF})
 		want := []byte{0x02}
-		if !bytes.Equal(got, want) { t.Errorf("got %x, want %x", got, want) }
+		if !bytes.Equal(got, want) {
+			t.Errorf("got %x, want %x", got, want)
+		}
 	})
 	t.Run("prefix start < end", func(t *testing.T) {
 		p := TablePrefix(5)
 		end := PrefixEnd(p)
-		if bytes.Compare(p, end) >= 0 { t.Error("prefix should be < PrefixEnd") }
+		if bytes.Compare(p, end) >= 0 {
+			t.Error("prefix should be < PrefixEnd")
+		}
 	})
 }
 
 func TestTableRange(t *testing.T) {
 	start, end := TableRange(3)
-	if !bytes.Equal(start, TablePrefix(3)) { t.Error("start != TablePrefix") }
-	if end == nil { t.Fatal("end is nil") }
+	if !bytes.Equal(start, TablePrefix(3)) {
+		t.Error("start != TablePrefix")
+	}
+	if end == nil {
+		t.Fatal("end is nil")
+	}
 	// Key for table 3 should be between start and end
 	k, _ := EncodeTableRowKey(3, []Value{Int64(5)}, 0)
-	if bytes.Compare(k, start) < 0 { t.Error("key < start") }
-	if bytes.Compare(k, end) >= 0 { t.Error("key >= end") }
+	if bytes.Compare(k, start) < 0 {
+		t.Error("key < start")
+	}
+	if bytes.Compare(k, end) >= 0 {
+		t.Error("key >= end")
+	}
 	// Key for table 4 should NOT be between
 	k4, _ := EncodeTableRowKey(4, []Value{Int64(1)}, 0)
 	if bytes.Compare(k4, start) >= 0 && bytes.Compare(k4, end) < 0 {
@@ -517,58 +645,74 @@ func TestTableRange(t *testing.T) {
 	}
 	// Table 4 start should be >= table 3 end
 	start4, _ := TableRange(4)
-	if bytes.Compare(start4, end) < 0 { t.Error("table 4 start should be >= table 3 end") }
+	if bytes.Compare(start4, end) < 0 {
+		t.Error("table 4 start should be >= table 3 end")
+	}
 }
 
 func TestGoldenVectors(t *testing.T) {
 	type golden struct {
-		name string
-		id   uint64
-		pk   []Value
-		ver  uint64
+		name  string
+		id    uint64
+		pk    []Value
+		ver   uint64
 		kinds []Kind
-		hex  string
+		hex   string
 	}
 	goldens := []golden{
 		{name: "single_int64", id: 1, pk: []Value{Int64(5)}, ver: 0, kinds: []Kind{KindInt64},
-		 hex: "010000000000000001308000000000000005ffffffffffffffff"},
+			hex: "010000000000000001308000000000000005ffffffffffffffff"},
 		{name: "single_string", id: 2, pk: []Value{String("ab")}, ver: 1, kinds: []Kind{KindString},
-		 hex: "0100000000000000025061620001fffffffffffffffe"},
+			hex: "0100000000000000025061620001fffffffffffffffe"},
 		{name: "composite", id: 7, pk: []Value{String("ab"), Int64(5)}, ver: 1, kinds: []Kind{KindString, KindInt64},
-		 hex: "0100000000000000075061620001308000000000000005fffffffffffffffe"},
-		{name: "bytes_with_zero", id: 11, pk: []Value{Bytes([]byte{0,1,0})}, ver: 0, kinds: []Kind{KindBytes},
-		 hex: "01000000000000000b6000ff0100ff0001ffffffffffffffff"},
+			hex: "0100000000000000075061620001308000000000000005fffffffffffffffe"},
+		{name: "bytes_with_zero", id: 11, pk: []Value{Bytes([]byte{0, 1, 0})}, ver: 0, kinds: []Kind{KindBytes},
+			hex: "01000000000000000b6000ff0100ff0001ffffffffffffffff"},
 		{name: "uint64", id: 4, pk: []Value{Uint64(999)}, ver: 10, kinds: []Kind{KindUint64},
-		 hex: "0100000000000000044000000000000003e7fffffffffffffff5"},
+			hex: "0100000000000000044000000000000003e7fffffffffffffff5"},
 		{name: "bool", id: 3, pk: []Value{Bool(true)}, ver: 0, kinds: []Kind{KindBool},
-		 hex: "0100000000000000032001ffffffffffffffff"},
+			hex: "0100000000000000032001ffffffffffffffff"},
 		{name: "null", id: 5, pk: []Value{Null()}, ver: 0, kinds: []Kind{KindNull},
-		 hex: "01000000000000000510ffffffffffffffff"},
+			hex: "01000000000000000510ffffffffffffffff"},
 		{name: "int64_min", id: 6, pk: []Value{Int64(-9223372036854775808)}, ver: 0, kinds: []Kind{KindInt64},
-		 hex: "010000000000000006300000000000000000ffffffffffffffff"},
+			hex: "010000000000000006300000000000000000ffffffffffffffff"},
 		{name: "int64_max", id: 7, pk: []Value{Int64(9223372036854775807)}, ver: 0, kinds: []Kind{KindInt64},
-		 hex: "01000000000000000730ffffffffffffffffffffffffffffffff"},
+			hex: "01000000000000000730ffffffffffffffffffffffffffffffff"},
 		{name: "version_max", id: 1, pk: []Value{Int64(0)}, ver: 0xFFFFFFFFFFFFFFFF, kinds: []Kind{KindInt64},
-		 hex: "0100000000000000013080000000000000000000000000000000"},
+			hex: "0100000000000000013080000000000000000000000000000000"},
 	}
 
 	for _, g := range goldens {
 		t.Run(g.name, func(t *testing.T) {
 			want, err := hex.DecodeString(g.hex)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			got, err := EncodeTableRowKey(g.id, g.pk, g.ver)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			if !bytes.Equal(got, want) {
 				t.Errorf("encode mismatch\n got: %x\nwant: %x", got, want)
 			}
 			// Decode round-trip the hand-written bytes
 			id, pk, ver, err := DecodeTableRowKey(want, g.kinds)
-			if err != nil { t.Fatalf("decode golden: %v", err) }
-			if id != g.id { t.Errorf("id = %d, want %d", id, g.id) }
-			if ver != g.ver { t.Errorf("ver = %d, want %d", ver, g.ver) }
-			if len(pk) != len(g.pk) { t.Fatalf("pk len mismatch") }
+			if err != nil {
+				t.Fatalf("decode golden: %v", err)
+			}
+			if id != g.id {
+				t.Errorf("id = %d, want %d", id, g.id)
+			}
+			if ver != g.ver {
+				t.Errorf("ver = %d, want %d", ver, g.ver)
+			}
+			if len(pk) != len(g.pk) {
+				t.Fatalf("pk len mismatch")
+			}
 			for i := range pk {
-				if !pk[i].Equal(g.pk[i]) { t.Errorf("pk[%d] mismatch", i) }
+				if !pk[i].Equal(g.pk[i]) {
+					t.Errorf("pk[%d] mismatch", i)
+				}
 			}
 		})
 	}
@@ -586,7 +730,11 @@ func TestPropertyOrdering(t *testing.T) {
 			eb := encodeValue(Int64(b))
 			cmpEnc := bytes.Compare(ea, eb)
 			var cmpLog int
-			if a < b { cmpLog = -1 } else if a > b { cmpLog = 1 }
+			if a < b {
+				cmpLog = -1
+			} else if a > b {
+				cmpLog = 1
+			}
 			if (cmpEnc < 0) != (cmpLog < 0) || (cmpEnc == 0) != (cmpLog == 0) {
 				t.Errorf("int64 a=%d b=%d: byte cmp=%d logical cmp=%d", a, b, cmpEnc, cmpLog)
 			}
@@ -611,10 +759,14 @@ func TestPropertyOrdering(t *testing.T) {
 		for i := 0; i < 200; i++ {
 			la := rng.Intn(8)
 			sa := make([]byte, la)
-			for x := 0; x < la; x++ { sa[x] = byte(rng.Intn(256)) }
+			for x := 0; x < la; x++ {
+				sa[x] = byte(rng.Intn(256))
+			}
 			lb := rng.Intn(8)
 			sb := make([]byte, lb)
-			for x := 0; x < lb; x++ { sb[x] = byte(rng.Intn(256)) }
+			for x := 0; x < lb; x++ {
+				sb[x] = byte(rng.Intn(256))
+			}
 			ea := encodeValue(String(string(sa)))
 			eb := encodeValue(String(string(sb)))
 			cmp := bytes.Compare(ea, eb)
@@ -630,7 +782,9 @@ func TestPropertyOrdering(t *testing.T) {
 		// a=(1,x), b=(2,*) always: b sorts after a regardless of second column
 		ka, _ := EncodeTableRowKey(1, []Value{Int64(1), Int64(999)}, 0)
 		kb, _ := EncodeTableRowKey(1, []Value{Int64(2), Int64(-999)}, 0)
-		if bytes.Compare(ka, kb) >= 0 { t.Error("(1,999) should sort before (2,-999)") }
+		if bytes.Compare(ka, kb) >= 0 {
+			t.Error("(1,999) should sort before (2,-999)")
+		}
 	})
 
 	// Version inversion
@@ -640,14 +794,20 @@ func TestPropertyOrdering(t *testing.T) {
 			vNew := vOld + 1 + uint64(rng.Int63())
 			ko, _ := EncodeTableRowKey(1, []Value{Int64(5)}, vOld)
 			kn, _ := EncodeTableRowKey(1, []Value{Int64(5)}, vNew)
-			if bytes.Compare(kn, ko) >= 0 { t.Error("newer version should sort before older") }
+			if bytes.Compare(kn, ko) >= 0 {
+				t.Error("newer version should sort before older")
+			}
 		}
 	})
 }
 
 func cmpInt(a, b uint64) int {
-	if a < b { return -1 }
-	if a > b { return 1 }
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
 	return 0
 }
 
@@ -656,14 +816,18 @@ func TestEncodeOutputImmutability(t *testing.T) {
 	k1, _ := EncodeTableRowKey(1, []Value{Int64(5)}, 0)
 	k2, _ := EncodeTableRowKey(1, []Value{Int64(5)}, 0)
 	k1[0] = 0xFF
-	if bytes.Equal(k1, k2) { t.Error("mutating returned slice should not affect other encodes") }
+	if bytes.Equal(k1, k2) {
+		t.Error("mutating returned slice should not affect other encodes")
+	}
 }
 
 func TestTablePrefixFreshSlice(t *testing.T) {
 	p1 := TablePrefix(1)
 	p2 := TablePrefix(1)
 	p1[1] = 0xFF
-	if bytes.Equal(p1, p2) { t.Error("mutating one TablePrefix should not affect another") }
+	if bytes.Equal(p1, p2) {
+		t.Error("mutating one TablePrefix should not affect another")
+	}
 }
 
 func TestTableRangeFreshSlice(t *testing.T) {
@@ -671,7 +835,9 @@ func TestTableRangeFreshSlice(t *testing.T) {
 	s1[1] = 0xFF
 	e1[1] = 0xEE
 	s2, _ := TableRange(1)
-	if bytes.Equal(s1, s2) { t.Error("mutating TableRange start should not affect later calls") }
+	if bytes.Equal(s1, s2) {
+		t.Error("mutating TableRange start should not affect later calls")
+	}
 }
 
 func BenchmarkEncodeInt64(b *testing.B) {
