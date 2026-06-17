@@ -1,354 +1,265 @@
-// Package key implements the key-encoding layer for the Plomvix sql_engine.
-// It turns logical table identifiers and primary-key column values into
-// order-preserving byte keys, and decodes them back.
+// Package key provides the single authoritative key encoding for the Plomvix
+// SQL engine. It encodes int64, uint64, string, and raw byte slice values into
+// sort-safe or storage composite keys with zero internal imports.
 package key
 
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"strings"
 )
 
-// Keyspace tags.
-const (
-	TagTableData byte = 0x01
-	TagMetadata  byte = 0x02
-	TagIndex     byte = 0x03
-)
-
-// Kind enumerates supported key-column types.
 type Kind uint8
 
 const (
-	KindNull Kind = iota
-	KindBool
-	KindInt64
-	KindUint64
-	KindString
-	KindBytes
+	KindUint64 Kind = 1
+	KindInt64  Kind = 2
+	KindString Kind = 3
+	KindBytes  Kind = 4
 )
 
-// Value is one primary-key column value.
-type Value struct {
-	kind Kind
-	b    []byte
+type Field struct {
+	Kind   Kind
+	Offset int
+	Length int
 }
 
-// Sentinel errors.
+type Key struct {
+	data   []byte
+	fields []Field
+}
+
 var (
-	ErrEmptyKey      = errors.New("key: empty input")
-	ErrBadTag        = errors.New("key: unknown keyspace tag")
-	ErrBadTypeTag    = errors.New("key: unknown column type tag")
-	ErrKindMismatch  = errors.New("key: decoded column kind does not match expected")
-	ErrTruncated     = errors.New("key: truncated input")
-	ErrBadField      = errors.New("key: malformed variable-length field")
-	ErrTrailingBytes = errors.New("key: trailing bytes after decode")
-	ErrNoPKColumns   = errors.New("key: at least one pk column required")
-	ErrNotCanonical  = errors.New("key: non-canonical encoding")
+	ErrNullByteInString    = errors.New("sql/key: string contains null byte")
+	ErrUnsupportedType     = errors.New("sql/key: unsupported field type")
+	ErrUnsupportedSortType = errors.New("sql/key: type not allowed in sort composite")
+	ErrInvalidKey          = errors.New("sql/key: invalid key")
+	ErrKindMismatch        = errors.New("sql/key: kind mismatch")
+	ErrNotComposite        = errors.New("sql/key: key is not composite")
 )
 
-func Null() Value { return Value{kind: KindNull} }
-func Bool(v bool) Value {
-	b := [1]byte{0}
-	if v {
-		b[0] = 1
-	}
-	return Value{kind: KindBool, b: b[:]}
+func (k Key) Bytes() []byte {
+	if k.data == nil { return nil }
+	out := make([]byte, len(k.data)); copy(out, k.data); return out
 }
-func Int64(v int64) Value {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(v))
-	return Value{kind: KindInt64, b: b}
-}
-func Uint64(v uint64) Value {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, v)
-	return Value{kind: KindUint64, b: b}
-}
-func String(v string) Value { return Value{kind: KindString, b: []byte(v)} }
-func Bytes(v []byte) Value {
-	b := make([]byte, len(v))
-	copy(b, v)
-	return Value{kind: KindBytes, b: b}
+func (k Key) Compare(other Key) int { return bytes.Compare(k.data, other.data) }
+func (k Key) Fields() []Field {
+	if k.fields == nil { return nil }
+	out := make([]Field, len(k.fields)); copy(out, k.fields); return out
 }
 
-func (val Value) Kind() Kind { return val.kind }
-
-func (val Value) AsBool() (bool, bool) {
-	if val.kind != KindBool || len(val.b) != 1 {
-		return false, false
-	}
-	return val.b[0] == 1, true
+func EncodeUint64(v uint64) Key {
+	d := make([]byte, 8); binary.BigEndian.PutUint64(d, v)
+	return Key{data: d, fields: []Field{{Kind: KindUint64, Offset: 0, Length: 8}}}
 }
-func (val Value) AsInt64() (int64, bool) {
-	if val.kind != KindInt64 || len(val.b) < 8 {
-		return 0, false
-	}
-	return int64(binary.BigEndian.Uint64(val.b)), true
+func EncodeInt64(v int64) Key {
+	u := uint64(v) ^ (1 << 63)
+	d := make([]byte, 8); binary.BigEndian.PutUint64(d, u)
+	return Key{data: d, fields: []Field{{Kind: KindInt64, Offset: 0, Length: 8}}}
 }
-func (val Value) AsUint64() (uint64, bool) {
-	if val.kind != KindUint64 || len(val.b) < 8 {
-		return 0, false
-	}
-	return binary.BigEndian.Uint64(val.b), true
+func EncodeString(s string) (Key, error) {
+	if strings.ContainsRune(s, 0) { return Key{}, ErrNullByteInString }
+	d := append([]byte(s), 0x00)
+	return Key{data: d, fields: []Field{{Kind: KindString, Offset: 0, Length: len(d)}}}, nil
 }
-func (val Value) AsString() (string, bool) {
-	if val.kind != KindString {
-		return "", false
-	}
-	return string(val.b), true
-}
-func (val Value) AsBytes() ([]byte, bool) {
-	if val.kind != KindBytes {
-		return nil, false
-	}
-	b := make([]byte, len(val.b))
-	copy(b, val.b)
-	return b, true
+func EncodeBytes(b []byte) Key {
+	d := make([]byte, len(b)); copy(d, b)
+	return Key{data: d, fields: []Field{{Kind: KindBytes, Offset: 0, Length: len(b)}}}
 }
 
-func (val Value) Equal(other Value) bool {
-	if val.kind != other.kind {
-		return false
-	}
-	if val.kind == KindNull {
-		return true
-	}
-	return string(val.b) == string(other.b)
+func requireScalar(k Key) (Field, error) {
+	if len(k.fields) == 0 && len(k.data) == 0 { return Field{}, ErrInvalidKey }
+	if len(k.fields) != 1 { return Field{}, ErrInvalidKey }
+	return k.fields[0], nil
 }
 
-// encodeValue returns the order-preserving byte encoding of val:
-// 1-byte type tag followed by the encoded payload.
-func encodeValue(val Value) []byte {
-	switch val.kind {
-	case KindNull:
-		return []byte{0x10}
-	case KindBool:
-		if val.b[0] == 1 {
-			return []byte{0x20, 1}
-		}
-		return []byte{0x20, 0}
-	case KindInt64:
-		out := make([]byte, 9)
-		out[0] = 0x30
-		v := uint64(val.b[0])<<56 | uint64(val.b[1])<<48 | uint64(val.b[2])<<40 | uint64(val.b[3])<<32 |
-			uint64(val.b[4])<<24 | uint64(val.b[5])<<16 | uint64(val.b[6])<<8 | uint64(val.b[7])
-		binary.BigEndian.PutUint64(out[1:], v^0x8000000000000000)
-		return out
-	case KindUint64:
-		out := make([]byte, 9)
-		out[0] = 0x40
-		copy(out[1:], val.b)
-		return out
-	case KindString, KindBytes:
-		tag := byte(0x50)
-		if val.kind == KindBytes {
-			tag = 0x60
-		}
-		var buf []byte
-		buf = append(buf, tag)
-		for _, c := range val.b {
-			if c == 0x00 {
-				buf = append(buf, 0x00, 0xFF)
-			} else {
-				buf = append(buf, c)
-			}
-		}
-		buf = append(buf, 0x00, 0x01) // terminator
-		return buf
-	default:
-		return nil
-	}
+func DecodeUint64(k Key) (uint64, error) {
+	f, err := requireScalar(k)
+	if err != nil { return 0, err }
+	if f.Kind != KindUint64 { return 0, ErrKindMismatch }
+	if f.Length != 8 || f.Offset+8 > len(k.data) { return 0, ErrInvalidKey }
+	return binary.BigEndian.Uint64(k.data[f.Offset:]), nil
+}
+func DecodeInt64(k Key) (int64, error) {
+	f, err := requireScalar(k)
+	if err != nil { return 0, err }
+	if f.Kind != KindInt64 { return 0, ErrKindMismatch }
+	if f.Length != 8 || f.Offset+8 > len(k.data) { return 0, ErrInvalidKey }
+	u := binary.BigEndian.Uint64(k.data[f.Offset:])
+	return int64(u ^ (1 << 63)), nil
+}
+func DecodeString(k Key) (string, error) {
+	f, err := requireScalar(k)
+	if err != nil { return "", err }
+	if f.Kind != KindString { return "", ErrKindMismatch }
+	if f.Offset+f.Length > len(k.data) { return "", ErrInvalidKey }
+	b := k.data[f.Offset : f.Offset+f.Length]
+	if len(b) == 0 || b[len(b)-1] != 0x00 { return "", ErrInvalidKey }
+	return string(b[:len(b)-1]), nil
+}
+func DecodeBytes(k Key) ([]byte, error) {
+	f, err := requireScalar(k)
+	if err != nil { return nil, err }
+	if f.Kind != KindBytes { return nil, ErrKindMismatch }
+	if f.Length > 0 && f.Offset+f.Length > len(k.data) { return nil, ErrInvalidKey }
+	raw := k.data[f.Offset : f.Offset+f.Length]
+	out := make([]byte, len(raw)); copy(out, raw); return out, nil
 }
 
-// decodeValue reads one value from the front of b, expecting the given Kind.
-// Returns the Value, number of bytes consumed, and any error.
-func decodeValue(b []byte, expected Kind) (Value, int, error) {
-	if len(b) == 0 {
-		return Value{}, 0, ErrTruncated
+func ParseKey(data []byte, kinds []Kind) (Key, error) {
+	if len(kinds) == 0 { return Key{}, ErrInvalidKey }
+	pos := 0
+	fields := make([]Field, 0, len(kinds))
+	for i, kind := range kinds {
+		switch kind {
+		case KindUint64, KindInt64:
+			if pos+8 > len(data) { return Key{}, ErrInvalidKey }
+			fields = append(fields, Field{Kind: kind, Offset: pos, Length: 8})
+			pos += 8
+		case KindString:
+			end := bytes.IndexByte(data[pos:], 0x00)
+			if end < 0 { return Key{}, ErrInvalidKey }
+			fields = append(fields, Field{Kind: KindString, Offset: pos, Length: end + 1})
+			pos += end + 1
+		case KindBytes:
+			if i != len(kinds)-1 { return Key{}, ErrInvalidKey }
+			fields = append(fields, Field{Kind: KindBytes, Offset: pos, Length: len(data) - pos})
+			pos = len(data)
+		default:
+			return Key{}, ErrInvalidKey
+		}
 	}
-
-	tag := b[0]
-	// Validate tag matches expected kind
-	switch tag {
-	case 0x10:
-		if expected != KindNull {
-			return Value{}, 0, ErrKindMismatch
-		}
-		return Null(), 1, nil
-	case 0x20:
-		if expected != KindBool {
-			return Value{}, 0, ErrKindMismatch
-		}
-		if len(b) < 2 {
-			return Value{}, 0, ErrTruncated
-		}
-		return Bool(b[1] == 1), 2, nil
-	case 0x30:
-		if expected != KindInt64 {
-			return Value{}, 0, ErrKindMismatch
-		}
-		if len(b) < 9 {
-			return Value{}, 0, ErrTruncated
-		}
-		v := binary.BigEndian.Uint64(b[1:9]) ^ 0x8000000000000000
-		return Int64(int64(v)), 9, nil
-	case 0x40:
-		if expected != KindUint64 {
-			return Value{}, 0, ErrKindMismatch
-		}
-		if len(b) < 9 {
-			return Value{}, 0, ErrTruncated
-		}
-		return Uint64(binary.BigEndian.Uint64(b[1:9])), 9, nil
-	case 0x50, 0x60:
-		expKind := KindString
-		if tag == 0x60 {
-			expKind = KindBytes
-		}
-		if expected != expKind {
-			return Value{}, 0, ErrKindMismatch
-		}
-		return decodeVarLen(b[1:], expKind)
-	default:
-		return Value{}, 0, ErrBadTypeTag
-	}
+	if pos != len(data) && kinds[len(kinds)-1] != KindBytes { return Key{}, ErrInvalidKey }
+	d := make([]byte, len(data)); copy(d, data)
+	return Key{data: d, fields: fields}, nil
 }
 
-// decodeVarLen decodes an escape-terminated string or bytes from b.
-func decodeVarLen(b []byte, kind Kind) (Value, int, error) {
-	var raw []byte
-	i := 0
-	for i < len(b) {
-		if b[i] == 0x00 {
-			if i+1 >= len(b) {
-				return Value{}, 0, ErrTruncated
-			}
-			switch b[i+1] {
-			case 0xFF:
-				raw = append(raw, 0x00)
-				i += 2
-			case 0x01:
-				// terminator found
-				i += 2
-				if kind == KindString {
-					return String(string(raw)), i + 1, nil // +1 for original tag
-				}
-				return Bytes(raw), i + 1, nil
-			default:
-				return Value{}, 0, ErrBadField
-			}
-		} else {
-			raw = append(raw, b[i])
-			i++
+func EncodeSortComposite(fields ...any) (Key, error) {
+	var d []byte
+	fs := make([]Field, 0, len(fields))
+	pos := 0
+	for _, f := range fields {
+		switch v := f.(type) {
+		case uint64:
+			b := make([]byte, 8); binary.BigEndian.PutUint64(b, v)
+			d = append(d, b...)
+			fs = append(fs, Field{Kind: KindUint64, Offset: pos, Length: 8})
+		case int64:
+			u := uint64(v) ^ (1 << 63)
+			b := make([]byte, 8); binary.BigEndian.PutUint64(b, u)
+			d = append(d, b...)
+			fs = append(fs, Field{Kind: KindInt64, Offset: pos, Length: 8})
+		case string, []byte:
+			return Key{}, ErrUnsupportedSortType
+		default:
+			return Key{}, ErrUnsupportedType
+		}
+		pos += 8
+	}
+	return Key{data: d, fields: fs}, nil
+}
+
+func DecodeSortComposite(k Key) ([]any, error) {
+	if len(k.fields) == 0 { return nil, ErrNotComposite }
+	vals := make([]any, len(k.fields))
+	for i, f := range k.fields {
+		if f.Offset+f.Length > len(k.data) { return nil, ErrInvalidKey }
+		switch f.Kind {
+		case KindUint64:
+			if f.Length != 8 { return nil, ErrInvalidKey }
+			vals[i] = binary.BigEndian.Uint64(k.data[f.Offset:])
+		case KindInt64:
+			if f.Length != 8 { return nil, ErrInvalidKey }
+			u := binary.BigEndian.Uint64(k.data[f.Offset:])
+			vals[i] = int64(u ^ (1 << 63))
+		default:
+			return nil, ErrKindMismatch
 		}
 	}
-	return Value{}, 0, ErrTruncated
+	return vals, nil
 }
 
-// EncodeTableRowKey builds [0x01][tableID][encoded pk][version].
-func EncodeTableRowKey(tableID uint64, pk []Value, version uint64) ([]byte, error) {
-	if len(pk) == 0 {
-		return nil, ErrNoPKColumns
-	}
-	var buf []byte
-	buf = append(buf, TagTableData)
-	buf = append(buf, 0, 0, 0, 0, 0, 0, 0, 0)
-	binary.BigEndian.PutUint64(buf[1:9], tableID)
-	for _, col := range pk {
-		buf = append(buf, encodeValue(col)...)
-	}
-	var vb [8]byte
-	binary.BigEndian.PutUint64(vb[:], ^version)
-	buf = append(buf, vb[:]...)
-	return buf, nil
-}
-
-// DecodeTableRowKey parses a row key. expectedKinds supplies the PK column
-// types from the table schema.
-func DecodeTableRowKey(b []byte, expectedKinds []Kind) (tableID uint64, pk []Value, version uint64, err error) {
-	if len(b) == 0 {
-		return 0, nil, 0, ErrEmptyKey
-	}
-	if len(expectedKinds) == 0 {
-		return 0, nil, 0, ErrNoPKColumns
-	}
-	if b[0] != TagTableData {
-		return 0, nil, 0, ErrBadTag
-	}
-	if len(b) < 9 {
-		return 0, nil, 0, ErrTruncated
-	}
-	tableID = binary.BigEndian.Uint64(b[1:9])
-	pos := 9
-	pk = make([]Value, 0, len(expectedKinds))
-	for _, kind := range expectedKinds {
-		if pos >= len(b) {
-			return 0, nil, 0, ErrTruncated
-		}
-		val, consumed, decErr := decodeValue(b[pos:], kind)
-		if decErr != nil {
-			return 0, nil, 0, decErr
-		}
-		pk = append(pk, val)
-		pos += consumed
-	}
-	if len(b)-pos < 8 {
-		return 0, nil, 0, ErrTruncated
-	}
-	version = ^binary.BigEndian.Uint64(b[pos:])
-	pos += 8
-	if pos != len(b) {
-		return 0, nil, 0, ErrTrailingBytes
-	}
-	return tableID, pk, version, nil
-}
-
-// TablePrefix returns [0x01][tableID]; bounds all rows of a table.
-func TablePrefix(tableID uint64) []byte {
-	buf := make([]byte, 9)
-	buf[0] = TagTableData
-	binary.BigEndian.PutUint64(buf[1:], tableID)
-	return buf
-}
-
-// IsCanonical reports whether b is in canonical form: it decodes cleanly with
-// expectedKinds AND re-encoding the decoded result produces byte-identical output.
-func IsCanonical(b []byte, expectedKinds []Kind) (bool, error) {
-	id, pk, ver, err := DecodeTableRowKey(b, expectedKinds)
-	if err != nil {
-		return false, err
-	}
-	reenc, err := EncodeTableRowKey(id, pk, ver)
-	if err != nil {
-		return false, err
-	}
-	if !bytes.Equal(b, reenc) {
-		return false, ErrNotCanonical
-	}
-	return true, nil
-}
-
-// PrefixEnd returns the smallest byte slice strictly greater than every key
-// with prefix p. Returns nil if p is empty or all 0xFF (unbounded).
-func PrefixEnd(p []byte) []byte {
-	if len(p) == 0 {
-		return nil
-	}
-	end := make([]byte, len(p))
-	copy(end, p)
-	for i := len(end) - 1; i >= 0; i-- {
-		if end[i] < 0xFF {
-			end[i]++
-			return end[:i+1]
+// EncodeStorageComposite encodes variable-length fields using
+// length-prefix framing. The resulting key is NOT sort-safe.
+// Do not use storage composite keys as index keys or scan boundaries.
+func EncodeStorageComposite(fields ...any) (Key, error) {
+	var d []byte
+	fs := make([]Field, 0, len(fields))
+	for _, f := range fields {
+		switch v := f.(type) {
+		case uint64:
+			appendLen4(&d, 8); off := len(d)
+			cb := make([]byte, 8); binary.BigEndian.PutUint64(cb, v)
+			d = append(d, cb...)
+			fs = append(fs, Field{Kind: KindUint64, Offset: off, Length: 8})
+		case int64:
+			u := uint64(v) ^ (1 << 63)
+			appendLen4(&d, 8); off := len(d)
+			cb := make([]byte, 8); binary.BigEndian.PutUint64(cb, u)
+			d = append(d, cb...)
+			fs = append(fs, Field{Kind: KindInt64, Offset: off, Length: 8})
+		case string:
+			if strings.ContainsRune(v, 0) { return Key{}, ErrNullByteInString }
+			b := []byte(v)
+			appendLen4(&d, len(b)); off := len(d)
+			d = append(d, b...)
+			fs = append(fs, Field{Kind: KindString, Offset: off, Length: len(b)})
+		case []byte:
+			appendLen4(&d, len(v)); off := len(d)
+			d = append(d, v...)
+			fs = append(fs, Field{Kind: KindBytes, Offset: off, Length: len(v)})
+		default:
+			return Key{}, ErrUnsupportedType
 		}
 	}
-	return nil // all 0xFF, unbounded
+	return Key{data: d, fields: fs}, nil
 }
 
-// TableRange returns [start, end) bounding all keys for tableID.
-func TableRange(tableID uint64) (start, end []byte) {
-	start = TablePrefix(tableID)
-	end = PrefixEnd(start)
-	return
+func appendLen4(d *[]byte, n int) {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, uint32(n))
+	*d = append(*d, b...)
+}
+
+func DecodeStorageComposite(k Key) ([]any, error) {
+	if len(k.fields) == 0 { return nil, ErrNotComposite }
+	vals := make([]any, len(k.fields))
+	for i, f := range k.fields {
+		if f.Offset+f.Length > len(k.data) { return nil, ErrInvalidKey }
+		switch f.Kind {
+		case KindUint64:
+			if f.Length != 8 { return nil, ErrInvalidKey }
+			vals[i] = binary.BigEndian.Uint64(k.data[f.Offset:])
+		case KindInt64:
+			if f.Length != 8 { return nil, ErrInvalidKey }
+			u := binary.BigEndian.Uint64(k.data[f.Offset:])
+			vals[i] = int64(u ^ (1 << 63))
+		case KindString:
+			vals[i] = string(k.data[f.Offset : f.Offset+f.Length])
+		case KindBytes:
+			b := make([]byte, f.Length); copy(b, k.data[f.Offset:f.Offset+f.Length])
+			vals[i] = b
+		default:
+			return nil, ErrKindMismatch
+		}
+	}
+	return vals, nil
+}
+
+func ParseStorageCompositeKey(data []byte, kinds []Kind) (Key, error) {
+	if len(kinds) == 0 { return Key{}, ErrInvalidKey }
+	pos := 0
+	fields := make([]Field, 0, len(kinds))
+	for _, kind := range kinds {
+		if pos+4 > len(data) { return Key{}, ErrInvalidKey }
+		length := int(binary.BigEndian.Uint32(data[pos:]))
+		pos += 4
+		if pos+length > len(data) { return Key{}, ErrInvalidKey }
+		fields = append(fields, Field{Kind: kind, Offset: pos, Length: length})
+		pos += length
+	}
+	if pos != len(data) { return Key{}, ErrInvalidKey }
+	d := make([]byte, len(data)); copy(d, data)
+	return Key{data: d, fields: fields}, nil
 }
