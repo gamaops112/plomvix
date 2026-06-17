@@ -80,6 +80,19 @@ headers to reconstruct field metadata.
 Uses `bytes.Compare` on the raw encoded data for sort order and equality
 checks.
 
+## Enterprise Hardening
+
+The key encoding package has been hardened with **enterprise hardening**:
+
+- **validateField** — centralized overflow-safe bounds and length validation
+  used by all decoders
+- **fuzz testing** — `ParseKey` and `ParseStorageCompositeKey` are fuzzed to
+  guarantee they **never panic** on arbitrary malformed input
+- **benchmarks** — hot encode/decode paths are benchmarked for regression
+  detection
+- **no API changes** — all public API signatures and behavior are unchanged
+- **no wire format changes** — all existing byte encodings are unchanged
+
 ## Non-Goals
 
 The key encoding package intentionally does not implement:

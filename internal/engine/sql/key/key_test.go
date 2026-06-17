@@ -436,6 +436,8 @@ func TestDocumentation(t *testing.T) {
 		"ParseStorageCompositeKey", "Compare", "zero internal imports", "no little-endian",
 		"KV store", "WAL", "storage pages", "query execution", "indexes",
 		"transaction IDs", "version stamps", "compression", "little-endian",
+		"enterprise hardening", "validateField", "fuzz testing", "never panic",
+		"benchmarks", "no API changes", "no wire format changes",
 	} {
 		if !bytes.Contains([]byte(c), []byte(s)) {
 			t.Errorf("missing: %q", s)
