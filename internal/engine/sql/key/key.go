@@ -42,12 +42,20 @@ var (
 // validateField checks that f is within bounds of data and has a valid length
 // for its Kind. Uses overflow-safe arithmetic.
 func validateField(data []byte, f Field) error {
-	if f.Offset < 0 || f.Length < 0 { return ErrInvalidKey }
-	if f.Offset > len(data) { return ErrInvalidKey }
-	if f.Length > len(data)-f.Offset { return ErrInvalidKey }
+	if f.Offset < 0 || f.Length < 0 {
+		return ErrInvalidKey
+	}
+	if f.Offset > len(data) {
+		return ErrInvalidKey
+	}
+	if f.Length > len(data)-f.Offset {
+		return ErrInvalidKey
+	}
 	switch f.Kind {
 	case KindUint64, KindInt64:
-		if f.Length != 8 { return ErrInvalidKey }
+		if f.Length != 8 {
+			return ErrInvalidKey
+		}
 	}
 	return nil
 }
@@ -106,35 +114,63 @@ func requireScalar(k Key) (Field, error) {
 
 func DecodeUint64(k Key) (uint64, error) {
 	f, err := requireScalar(k)
-	if err != nil { return 0, err }
-	if f.Kind != KindUint64 { return 0, ErrKindMismatch }
-	if err := validateField(k.data, f); err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
+	if f.Kind != KindUint64 {
+		return 0, ErrKindMismatch
+	}
+	if err := validateField(k.data, f); err != nil {
+		return 0, err
+	}
 	return binary.BigEndian.Uint64(k.data[f.Offset:]), nil
 }
 func DecodeInt64(k Key) (int64, error) {
 	f, err := requireScalar(k)
-	if err != nil { return 0, err }
-	if f.Kind != KindInt64 { return 0, ErrKindMismatch }
-	if err := validateField(k.data, f); err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
+	if f.Kind != KindInt64 {
+		return 0, ErrKindMismatch
+	}
+	if err := validateField(k.data, f); err != nil {
+		return 0, err
+	}
 	u := binary.BigEndian.Uint64(k.data[f.Offset:])
 	return int64(u ^ (1 << 63)), nil
 }
 func DecodeString(k Key) (string, error) {
 	f, err := requireScalar(k)
-	if err != nil { return "", err }
-	if f.Kind != KindString { return "", ErrKindMismatch }
-	if err := validateField(k.data, f); err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
+	if f.Kind != KindString {
+		return "", ErrKindMismatch
+	}
+	if err := validateField(k.data, f); err != nil {
+		return "", err
+	}
 	b := k.data[f.Offset : f.Offset+f.Length]
-	if len(b) == 0 || b[len(b)-1] != 0x00 { return "", ErrInvalidKey }
+	if len(b) == 0 || b[len(b)-1] != 0x00 {
+		return "", ErrInvalidKey
+	}
 	return string(b[:len(b)-1]), nil
 }
 func DecodeBytes(k Key) ([]byte, error) {
 	f, err := requireScalar(k)
-	if err != nil { return nil, err }
-	if f.Kind != KindBytes { return nil, ErrKindMismatch }
-	if err := validateField(k.data, f); err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
+	if f.Kind != KindBytes {
+		return nil, ErrKindMismatch
+	}
+	if err := validateField(k.data, f); err != nil {
+		return nil, err
+	}
 	raw := k.data[f.Offset : f.Offset+f.Length]
-	out := make([]byte, len(raw)); copy(out, raw); return out, nil
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	return out, nil
 }
 
 func ParseKey(data []byte, kinds []Kind) (Key, error) {
@@ -204,10 +240,14 @@ func EncodeSortComposite(fields ...any) (Key, error) {
 }
 
 func DecodeSortComposite(k Key) ([]any, error) {
-	if len(k.fields) == 0 { return nil, ErrNotComposite }
+	if len(k.fields) == 0 {
+		return nil, ErrNotComposite
+	}
 	vals := make([]any, len(k.fields))
 	for i, f := range k.fields {
-		if err := validateField(k.data, f); err != nil { return nil, err }
+		if err := validateField(k.data, f); err != nil {
+			return nil, err
+		}
 		switch f.Kind {
 		case KindUint64:
 			vals[i] = binary.BigEndian.Uint64(k.data[f.Offset:])
@@ -272,10 +312,14 @@ func appendLen4(d *[]byte, n int) {
 }
 
 func DecodeStorageComposite(k Key) ([]any, error) {
-	if len(k.fields) == 0 { return nil, ErrNotComposite }
+	if len(k.fields) == 0 {
+		return nil, ErrNotComposite
+	}
 	vals := make([]any, len(k.fields))
 	for i, f := range k.fields {
-		if err := validateField(k.data, f); err != nil { return nil, err }
+		if err := validateField(k.data, f); err != nil {
+			return nil, err
+		}
 		switch f.Kind {
 		case KindUint64:
 			vals[i] = binary.BigEndian.Uint64(k.data[f.Offset:])
@@ -285,7 +329,8 @@ func DecodeStorageComposite(k Key) ([]any, error) {
 		case KindString:
 			vals[i] = string(k.data[f.Offset : f.Offset+f.Length])
 		case KindBytes:
-			b := make([]byte, f.Length); copy(b, k.data[f.Offset:f.Offset+f.Length])
+			b := make([]byte, f.Length)
+			copy(b, k.data[f.Offset:f.Offset+f.Length])
 			vals[i] = b
 		default:
 			return nil, ErrKindMismatch
