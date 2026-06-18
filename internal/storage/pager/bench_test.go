@@ -2,14 +2,14 @@ package pager
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
-
-// Benchmark helpers
 
 // preallocatePages creates a pager with n pre-allocated data pages.
 // The pager is opened, n pages are allocated, and the pager is returned
 // ready for benchmark use. The caller must close it.
+// Pages are allocated starting from FirstDataPageID (2).
 func preallocatePages(b *testing.B, n int) *filePager {
 	b.Helper()
 	dir := b.TempDir()
@@ -26,9 +26,16 @@ func preallocatePages(b *testing.B, n int) *filePager {
 	return p
 }
 
+// allocatedPageIDs returns the expected page IDs after allocating n pages.
+func allocatedPageIDs(n int) []uint64 {
+	ids := make([]uint64, n)
+	for i := 0; i < n; i++ {
+		ids[i] = uint64(FirstDataPageID + i)
+	}
+	return ids
+}
+
 func BenchmarkAllocatePage(b *testing.B) {
-	// Each iteration creates its own pager to measure allocation from
-	// an empty free-list (file extension path).
 	b.Run("extend", func(b *testing.B) {
 		dir := b.TempDir()
 		ctx := context.Background()
@@ -44,14 +51,13 @@ func BenchmarkAllocatePage(b *testing.B) {
 		}
 	})
 
-	// Benchmark allocation from free-list (reuse path).
 	b.Run("reuse", func(b *testing.B) {
 		p := preallocatePages(b, 1000)
 		defer p.Close(context.Background())
 		ctx := context.Background()
 
-		// Free all pages so the free-list is populated
-		for id := uint64(1); id <= 1000; id++ {
+		// Free all allocated pages so the free-list is populated.
+		for _, id := range allocatedPageIDs(1000) {
 			_ = p.FreePage(ctx, id)
 		}
 
@@ -61,7 +67,6 @@ func BenchmarkAllocatePage(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			// Re-free so we don't exhaust the free-list
 			_ = p.FreePage(ctx, id)
 		}
 	})
@@ -72,10 +77,11 @@ func BenchmarkWritePage(b *testing.B) {
 	defer p.Close(context.Background())
 	ctx := context.Background()
 	body := make([]byte, DataPageBodySize)
+	ids := allocatedPageIDs(1000)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pageID := uint64(i%1000 + 1)
+		pageID := ids[i%1000]
 		if err := p.WritePage(ctx, pageID, body); err != nil {
 			b.Fatal(err)
 		}
@@ -86,10 +92,10 @@ func BenchmarkReadPage(b *testing.B) {
 	p := preallocatePages(b, 1000)
 	defer p.Close(context.Background())
 	ctx := context.Background()
+	ids := allocatedPageIDs(1000)
 
-	// Write some data so we're reading real content
 	body := make([]byte, DataPageBodySize)
-	for id := uint64(1); id <= 1000; id++ {
+	for _, id := range ids {
 		if err := p.WritePage(ctx, id, body); err != nil {
 			b.Fatal(err)
 		}
@@ -97,7 +103,52 @@ func BenchmarkReadPage(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pageID := uint64(i%1000 + 1)
+		pageID := ids[i%1000]
 		_, _ = p.ReadPage(ctx, pageID)
+	}
+}
+
+// -- Transaction benchmarks (Task 9) --
+
+func BenchmarkCommitTx(b *testing.B) {
+	body := make([]byte, DataPageBodySize)
+
+	for _, pagesPerTx := range []int{1, 10, 100} {
+		b.Run(fmt.Sprintf("pages=%d", pagesPerTx), func(b *testing.B) {
+			dir := b.TempDir()
+			ctx := context.Background()
+			p := New(dir + "/committx.pager").(*filePager)
+			if err := p.Open(ctx); err != nil {
+				b.Fatal(err)
+			}
+			defer p.Close(ctx)
+
+			// Pre-allocate enough pages for all transactions.
+			totalPages := b.N * pagesPerTx
+			if totalPages == 0 {
+				totalPages = pagesPerTx
+			}
+			for i := 0; i < totalPages; i++ {
+				if _, err := p.AllocatePage(ctx); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := p.BeginTx(ctx); err != nil {
+					b.Fatal(err)
+				}
+				for j := 0; j < pagesPerTx; j++ {
+					pageID := uint64(FirstDataPageID + i*pagesPerTx + j)
+					if err := p.WritePage(ctx, pageID, body); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if err := p.CommitTx(ctx); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
