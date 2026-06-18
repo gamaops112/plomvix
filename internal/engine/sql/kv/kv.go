@@ -3,9 +3,9 @@
 // It implements the same Get/Set/Delete/Scan contract as the in-memory store
 // but stores data durably on disk.
 //
-// This is the Basic tier — leaf-only deletes, no node merging, and a known
-// trade-off where page allocations during splits happen outside the KV
-// transaction (leaked pages on crash, but tree integrity preserved).
+// This is the Enterprise tier — TOAST overflow pages for large values (up to
+// 16MB), deep structural integrity verification (Check), and atomic space
+// reclamation (Compact) via shadow paging.
 package kv
 
 import (
@@ -33,9 +33,14 @@ const (
 	LeafSlotSize     = 580
 	InternalSlotSize = 72
 
+	// Enterprise constants.
+	MaxValSizeEnterprise = 16 * 1024 * 1024 // 16MB hard limit for TOAST
+	MaxOverflowChainLen  = 5000             // Sanity limit (~4118 needed for 16MB / 4075)
+
 	NodeTypeLeaf     byte = 0x01
 	NodeTypeInternal byte = 0x02
 	NodeTypeMeta     byte = 0x03
+	NodeTypeOverflow byte = 0x04 // Overflow page for TOAST large values
 )
 
 // MetaPageID is the permanently reserved page for the KVStore meta page.
@@ -74,6 +79,15 @@ type KVStore interface {
 	// Close releases KVStore resources. Does NOT close the underlying pager.
 	// Idempotent. Subsequent operations return ErrClosed.
 	Close(ctx context.Context) error
+
+	// Check walks the live B+ Tree and verifies deep structural integrity,
+	// including page reachability, sorting, routing rules, and cycle detection.
+	Check(ctx context.Context) error
+
+	// Compact rewrites the entire B+ Tree to new pages via shadow paging,
+	// reclaiming space from deleted keys, underfull nodes, and pages reachable
+	// from the old tree. It atomically swaps the root pointer.
+	Compact(ctx context.Context) error
 }
 
 // Sentinel errors.

@@ -33,8 +33,17 @@ func decodeMetaPage(data []byte) (rootPageID uint64, err error) {
 
 // --- Leaf Node ---
 
+// leafValueRef describes how a leaf slot's value is stored.
+type leafValueRef struct {
+	totalLen       uint32
+	inline         []byte // up to 512 bytes (!hasOverflow) or 504 bytes (hasOverflow)
+	overflowPageID uint64 // valid only if hasOverflow
+	hasOverflow    bool
+}
+
 // encodeLeafNode serializes keys, values, and nextLeaf into a leaf node body.
-// The body size must equal pager.DataPageBodySize.
+// values is a slice of raw byte slices (for Basic compatibility) or can be
+// constructed by callers. The function detects overflow based on len(v) > MaxValSize.
 func encodeLeafNode(keys []key.Key, values [][]byte, nextLeaf uint64) ([]byte, error) {
 	if len(keys) != len(values) {
 		return nil, fmt.Errorf("%w: keys/values length mismatch", ErrTreeCorrupt)
@@ -61,19 +70,25 @@ func encodeLeafNode(keys []key.Key, values [][]byte, nextLeaf uint64) ([]byte, e
 		if len(k.Bytes()) > MaxKeySize {
 			return nil, ErrKeyTooLarge
 		}
-		if len(v) > MaxValSize {
+		if len(v) > MaxValSizeEnterprise {
 			return nil, ErrValueTooLarge
 		}
 
 		slot := body[offset : offset+LeafSlotSize]
-		// KeyLength (1 byte)
 		slot[0] = uint8(len(k.Bytes()))
-		// Key (63 bytes, zero-padded after actual bytes)
 		copy(slot[1:64], k.Bytes())
-		// ValueLength (4 bytes)
-		binary.BigEndian.PutUint32(slot[64:68], uint32(len(v)))
-		// Value (512 bytes, zero-padded)
-		copy(slot[68:580], v)
+
+		if len(v) > MaxValSize {
+			// Overflow: v = [overflowPageID(8) | actual_value_bytes].
+			// totalLen is the actual value length (len(v) - 8).
+			totalLen := len(v) - 8
+			binary.BigEndian.PutUint32(slot[64:68], uint32(totalLen))
+			copy(slot[68:76], v[:8])  // overflowPageID
+			copy(slot[76:580], v[8:]) // prefix (up to 504 bytes)
+		} else {
+			binary.BigEndian.PutUint32(slot[64:68], uint32(len(v)))
+			copy(slot[68:580], v)
+		}
 
 		offset += LeafSlotSize
 	}
@@ -81,8 +96,53 @@ func encodeLeafNode(keys []key.Key, values [][]byte, nextLeaf uint64) ([]byte, e
 	return body, nil
 }
 
-// decodeLeafNode decodes a leaf node body. Returns copies of keys and values.
-func decodeLeafNode(data []byte) (keys []key.Key, values [][]byte, nextLeaf uint64, err error) {
+// encodeLeafNodeWithRefs serializes using leafValueRefs directly.
+func encodeLeafNodeWithRefs(keys []key.Key, refs []leafValueRef, nextLeaf uint64) ([]byte, error) {
+	if len(keys) != len(refs) {
+		return nil, fmt.Errorf("%w: keys/refs length mismatch", ErrTreeCorrupt)
+	}
+	if len(keys) > MaxLeafKeys {
+		return nil, fmt.Errorf("%w: too many leaf keys", ErrTreeCorrupt)
+	}
+	for i := 1; i < len(keys); i++ {
+		if keys[i-1].Compare(keys[i]) >= 0 {
+			return nil, fmt.Errorf("%w: leaf keys not strictly ascending", ErrTreeCorrupt)
+		}
+	}
+
+	body := make([]byte, pager.DataPageBodySize)
+	body[0] = NodeTypeLeaf
+	binary.BigEndian.PutUint16(body[1:3], uint16(len(keys)))
+	binary.BigEndian.PutUint64(body[3:11], nextLeaf)
+
+	offset := 11
+	for i := 0; i < len(keys); i++ {
+		k := keys[i]
+		ref := refs[i]
+		if len(k.Bytes()) > MaxKeySize {
+			return nil, ErrKeyTooLarge
+		}
+
+		slot := body[offset : offset+LeafSlotSize]
+		slot[0] = uint8(len(k.Bytes()))
+		copy(slot[1:64], k.Bytes())
+		binary.BigEndian.PutUint32(slot[64:68], ref.totalLen)
+
+		if ref.hasOverflow {
+			binary.BigEndian.PutUint64(slot[68:76], ref.overflowPageID)
+			copy(slot[76:580], ref.inline)
+		} else {
+			copy(slot[68:580], ref.inline)
+		}
+
+		offset += LeafSlotSize
+	}
+
+	return body, nil
+}
+
+// decodeLeafNodeRefs decodes a leaf node body and returns keys with value references.
+func decodeLeafNodeRefs(data []byte) (keys []key.Key, refs []leafValueRef, nextLeaf uint64, err error) {
 	if len(data) != pager.DataPageBodySize {
 		return nil, nil, 0, fmt.Errorf("%w: wrong leaf body size", ErrTreeCorrupt)
 	}
@@ -97,13 +157,12 @@ func decodeLeafNode(data []byte) (keys []key.Key, values [][]byte, nextLeaf uint
 	nextLeaf = binary.BigEndian.Uint64(data[3:11])
 
 	keys = make([]key.Key, 0, count)
-	values = make([][]byte, 0, count)
+	refs = make([]leafValueRef, 0, count)
 
 	offset := 11
 	for i := 0; i < count; i++ {
 		slot := data[offset : offset+LeafSlotSize]
 
-		// KeyLength at slot[0], key bytes at slot[1:1+kLen].
 		kLen := int(slot[0])
 		if kLen > MaxKeySize {
 			return nil, nil, 0, fmt.Errorf("%w: leaf key length exceeds max", ErrTreeCorrupt)
@@ -112,19 +171,51 @@ func decodeLeafNode(data []byte) (keys []key.Key, values [][]byte, nextLeaf uint
 		copy(kBytes, slot[1:1+kLen])
 		k := importKey(kBytes)
 
-		valLen := int(binary.BigEndian.Uint32(slot[64:68]))
-		if valLen > MaxValSize {
-			return nil, nil, 0, fmt.Errorf("%w: leaf value length exceeds max", ErrTreeCorrupt)
+		totalLen := binary.BigEndian.Uint32(slot[64:68])
+		if totalLen > MaxValSizeEnterprise {
+			return nil, nil, 0, fmt.Errorf("%w: leaf value length exceeds enterprise max", ErrTreeCorrupt)
 		}
-		v := make([]byte, valLen)
-		copy(v, slot[68:68+valLen])
+
+		ref := leafValueRef{totalLen: totalLen}
+		if totalLen > uint32(MaxValSize) {
+			ref.hasOverflow = true
+			ref.overflowPageID = binary.BigEndian.Uint64(slot[68:76])
+			ref.inline = make([]byte, 504)
+			copy(ref.inline, slot[76:580])
+		} else {
+			ref.inline = make([]byte, totalLen)
+			copy(ref.inline, slot[68:68+int(totalLen)])
+		}
 
 		keys = append(keys, k)
-		values = append(values, v)
+		refs = append(refs, ref)
 
 		offset += LeafSlotSize
 	}
 
+	return keys, refs, nextLeaf, nil
+}
+
+// decodeLeafNode decodes a leaf node body. Returns copies of keys and values.
+// For overflow values (totalLen > MaxValSize), the value is returned as
+// [overflowPageID(8) | inline prefix(up to 504)] — 512 bytes total.
+// Use decodeLeafNodeRefs for structured ref-based decoding.
+func decodeLeafNode(data []byte) (keys []key.Key, values [][]byte, nextLeaf uint64, err error) {
+	keys, refs, nextLeaf, err := decodeLeafNodeRefs(data)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	values = make([][]byte, len(refs))
+	for i, ref := range refs {
+		if ref.hasOverflow {
+			v := make([]byte, 512)
+			binary.BigEndian.PutUint64(v[0:8], ref.overflowPageID)
+			copy(v[8:512], ref.inline)
+			values[i] = v
+		} else {
+			values[i] = ref.inline
+		}
+	}
 	return keys, values, nextLeaf, nil
 }
 
@@ -212,4 +303,37 @@ func decodeInternalNode(data []byte) (childPtrs []uint64, keys []key.Key, err er
 // importKey creates a key.Key from raw bytes, preserving byte-wise ordering.
 func importKey(b []byte) key.Key {
 	return key.EncodeBytes(b)
+}
+
+// --- Overflow Page ---
+
+const overflowChunkSize = 4075 // pager.DataPageBodySize - 1 (NodeType) - 8 (NextPtr)
+
+// encodeOverflowPage serializes an overflow page.
+func encodeOverflowPage(nextPtr uint64, chunk []byte) ([]byte, error) {
+	if len(chunk) > overflowChunkSize {
+		return nil, fmt.Errorf("%w: overflow chunk too large: %d > %d", ErrTreeCorrupt, len(chunk), overflowChunkSize)
+	}
+	body := make([]byte, pager.DataPageBodySize)
+	body[0] = NodeTypeOverflow
+	binary.BigEndian.PutUint64(body[1:9], nextPtr)
+	copy(body[9:9+len(chunk)], chunk)
+	// Remainder zero-filled.
+	return body, nil
+}
+
+// decodeOverflowPage decodes an overflow page. Returns the next pointer and
+// the chunk data (a copy of the actual bytes, not the full 4075-byte buffer).
+func decodeOverflowPage(data []byte) (nextPtr uint64, chunk []byte, err error) {
+	if len(data) != pager.DataPageBodySize {
+		return 0, nil, fmt.Errorf("%w: wrong overflow body size", ErrTreeCorrupt)
+	}
+	if data[0] != NodeTypeOverflow {
+		return 0, nil, fmt.Errorf("%w: not an overflow page", ErrTreeCorrupt)
+	}
+	nextPtr = binary.BigEndian.Uint64(data[1:9])
+	// Copy all remaining bytes (the chunk uses up to overflowChunkSize bytes).
+	chunk = make([]byte, overflowChunkSize)
+	copy(chunk, data[9:])
+	return nextPtr, chunk, nil
 }
