@@ -2,6 +2,8 @@ package store_test
 
 import (
 	"errors"
+	"fmt"
+	"math/rand"
 	"os"
 	"sync"
 	"testing"
@@ -277,6 +279,10 @@ func TestDocumentation(t *testing.T) {
 		"in-memory", "no transactions",
 		"WAL", "disk persistence", "storage pages", "buffer pool",
 		"transactions", "compaction", "snapshots", "sharded locking",
+		// enterprise hardening section
+		"Enterprise Hardening", "sorted-invariant", "overwrite stress",
+		"size-scaling", "O(n)", "flat relative to store size",
+		"on-disk storage", "no API changes",
 	} {
 		if !contains(c, s) {
 			t.Errorf("missing: %q", s)
@@ -295,4 +301,82 @@ func searchSub(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestStore_SortedInvariantUnderConcurrentChurn(t *testing.T) {
+	s := store.New()
+	const numGoroutines = 50
+	const opsPerGoroutine = 200
+	const keySpace = 500
+
+	var wg sync.WaitGroup
+	for g := 0; g < numGoroutines; g++ {
+		wg.Add(1)
+		go func(seed int64) {
+			defer wg.Done()
+			r := rand.New(rand.NewSource(seed))
+			for i := 0; i < opsPerGoroutine; i++ {
+				n := r.Intn(keySpace)
+				k := key.EncodeUint64(uint64(n))
+				if r.Intn(2) == 0 {
+					_ = s.Put(k, []byte("v"))
+				} else {
+					_ = s.Delete(k)
+				}
+			}
+		}(int64(g))
+	}
+	wg.Wait()
+
+	entries, err := s.Scan(key.EncodeUint64(0), key.EncodeUint64(keySpace+1))
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	for i := 1; i < len(entries); i++ {
+		if entries[i-1].Key.Compare(entries[i].Key) >= 0 {
+			t.Fatalf("sorted invariant violated at index %d: %v >= %v",
+				i, entries[i-1].Key.Bytes(), entries[i].Key.Bytes())
+		}
+	}
+}
+
+func TestStore_ConcurrentOverwriteSameKeys(t *testing.T) {
+	s := store.New()
+	const keySpace = 5
+	const numGoroutines = 50
+	const writesPerKey = 100
+
+	var wg sync.WaitGroup
+	for g := 0; g < numGoroutines; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < writesPerKey; i++ {
+				for k := 0; k < keySpace; k++ {
+					kk := key.EncodeUint64(uint64(k))
+					val := []byte(fmt.Sprintf("g=%d,i=%d,k=%d", g, i, k))
+					_ = s.Put(kk, val)
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	if s.Len() != keySpace {
+		t.Fatalf("expected Len()=%d, got %d", keySpace, s.Len())
+	}
+
+	entries, err := s.Scan(key.EncodeUint64(0), key.EncodeUint64(keySpace))
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if len(entries) != keySpace {
+		t.Fatalf("expected %d entries from scan, got %d", keySpace, len(entries))
+	}
+	for i := 1; i < len(entries); i++ {
+		if entries[i-1].Key.Compare(entries[i].Key) >= 0 {
+			t.Fatalf("sorted invariant violated at index %d", i)
+		}
+	}
 }

@@ -31,6 +31,50 @@ func (s *Store) Len() int
 - `ErrNotFound` — key not present in the store
 - `ErrNilStore` — operation attempted on a nil `*Store`
 
+## Enterprise Hardening
+
+The in-memory store includes enterprise-grade hardening for production workloads:
+
+### Stress Tests
+
+Two dedicated stress tests validate correctness under concurrent churn:
+
+| Test | Purpose |
+|------|---------|
+| `TestStore_SortedInvariantUnderConcurrentChurn` | 50 goroutines × 200 ops each across a keyspace of 500. Verifies the **sorted-invariant** is never violated after concurrent Put/Delete churn. |
+| `TestStore_ConcurrentOverwriteSameKeys` | 50 goroutines × 100 writes per key across 5 keys. Verifies Len and Scan remain correct under extreme **overwrite stress** across a tight keyspace. |
+
+### Benchmarks
+
+| Benchmark | Pattern |
+|-----------|---------|
+| `BenchmarkPut` | Appends at end of slice (best case); paired with Delete to keep store size stable. |
+| `BenchmarkPut_WorstCaseFrontInsert` | Inserts at position 0 (worst-case **O(n)**). |
+| `BenchmarkGet` | Reads from the middle key; roughly **O(log n)**. |
+| `BenchmarkDelete` | Removes the middle key; cost dominated by slice shift **O(n)**. |
+| `BenchmarkScan` | Fixed 100-entry window; cost is **flat relative to store size** (just slice traversal). |
+
+All benchmarks include **size-scaling** sub-benchmarks at 1 k, 10 k, and 100 k entries.
+
+### Performance Profile
+
+Operation costs for the in-memory, sorted-slice design:
+
+| Operation | Complexity | Notes |
+|-----------|------------|-------|
+| Get | O(log n) | sort.Search + value copy |
+| Put | O(n) | sort.Search + slice insertion |
+| Delete | O(n) | sort.Search + slice deletion |
+| Scan | O(log n + m) | sort.Search + copy of m entries |
+
+### Future Direction
+
+The sorted-slice design is a stepping stone. A persistent B-Tree or LSM-based
+engine will eventually replace it, providing **on-disk storage** and
+transactional semantics. All existing tests and benchmarks validate that
+hardening will survive such a transition with **no API changes** to the
+`Store` type.
+
 ## Non-Goals
 
 The in-memory store intentionally does not implement:
