@@ -421,7 +421,7 @@ func (s *btreeStore) splitLeaf(ctx context.Context, leafID uint64,
 
 	// Propagate the split upward (insert separator into parent).
 	// Use remaining pre-allocated pages for internal splits.
-	sepKey := rightKeys[0] // first key of right leaf is the separator
+	sepKey := rightKeys[0]     // first key of right leaf is the separator
 	splitPages := newPages[1:] // skip newLeafID, use rest for internal splits
 	newRoot, err := s.insertIntoParent(ctx, path, leafID, newLeafID, sepKey, splitPages)
 	if err != nil {
