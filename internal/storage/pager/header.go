@@ -7,10 +7,10 @@ import (
 
 // pagerHeader represents the decoded contents of the header page (page 0).
 type pagerHeader struct {
-	magic       uint32
-	version     uint32
-	pageSize    uint32
-	pageCount   uint64
+	magic        uint32
+	version      uint32
+	pageSize     uint32
+	pageCount    uint64
 	freeListHead uint64
 }
 
@@ -68,10 +68,10 @@ func decodeHeader(data []byte) (pagerHeader, error) {
 	}
 
 	return pagerHeader{
-		magic:         magic,
-		version:       version,
-		pageSize:      pageSize,
-		pageCount:     binary.BigEndian.Uint64(data[12:20]),
-		freeListHead:  binary.BigEndian.Uint64(data[20:28]),
+		magic:        magic,
+		version:      version,
+		pageSize:     pageSize,
+		pageCount:    binary.BigEndian.Uint64(data[12:20]),
+		freeListHead: binary.BigEndian.Uint64(data[20:28]),
 	}, nil
 }

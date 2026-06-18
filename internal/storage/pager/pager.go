@@ -17,7 +17,7 @@ import (
 
 // Constants
 const (
-	PageSize      = 4096   // bytes; matches common OS page size
+	PageSize      = 4096 // bytes; matches common OS page size
 	HeaderPageID  = 0
 	FormatVersion = 1
 	MagicNumber   = 0x506C6D76 // "Plmv" as uint32, big-endian
@@ -94,13 +94,13 @@ const (
 
 // filePager implements Pager backed by an *os.File.
 type filePager struct {
-	mu          sync.RWMutex
-	path        string
-	file        *os.File
-	state       storeState
-	pageCount   uint64
+	mu           sync.RWMutex
+	path         string
+	file         *os.File
+	state        storeState
+	pageCount    uint64
 	freeListHead uint64
-	freeSet     map[uint64]struct{}
+	freeSet      map[uint64]struct{}
 }
 
 // New creates a Pager backed by the file at the given path.
@@ -160,11 +160,11 @@ func (p *filePager) Open(ctx context.Context) error {
 		}
 
 		header := encodeHeader(pagerHeader{
-			magic:         MagicNumber,
-			version:       FormatVersion,
-			pageSize:      PageSize,
-			pageCount:     1, // just the header page
-			freeListHead:  freeListSentinel,
+			magic:        MagicNumber,
+			version:      FormatVersion,
+			pageSize:     PageSize,
+			pageCount:    1, // just the header page
+			freeListHead: freeListSentinel,
 		})
 
 		if _, err := f.WriteAt(header, 0); err != nil {
@@ -355,11 +355,11 @@ func (p *filePager) AllocatePage(ctx context.Context) (uint64, error) {
 // freeListHead. Caller must hold the write lock.
 func (p *filePager) writeHeader(pageCount uint64, freeListHead uint64) error {
 	header := encodeHeader(pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     pageCount,
-		freeListHead:  freeListHead,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    pageCount,
+		freeListHead: freeListHead,
 	})
 	if _, err := p.file.WriteAt(header, 0); err != nil {
 		return fmt.Errorf("pager: write header: %w", err)

@@ -66,11 +66,11 @@ func TestPager_StateMachine(t *testing.T) {
 
 func TestEncodeDecodeHeader_RoundTrip(t *testing.T) {
 	h := pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     42,
-		freeListHead:  freeListSentinel,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    42,
+		freeListHead: freeListSentinel,
 	}
 	data := encodeHeader(h)
 	if len(data) != PageSize {
@@ -625,11 +625,11 @@ func (p *filePager) extendFile(ctx context.Context) error {
 	// Update header
 	p.pageCount++
 	header := encodeHeader(pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     p.pageCount,
-		freeListHead:  p.freeListHead,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    p.pageCount,
+		freeListHead: p.freeListHead,
 	})
 	if _, err := p.file.WriteAt(header, 0); err != nil {
 		return fmt.Errorf("extend: write header: %w", err)
@@ -691,11 +691,11 @@ func TestFreeListWalk_HeadPointsAtZero(t *testing.T) {
 
 	// Create a file with header free-list head = 0
 	writeHeaderToFile(t, path, pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     5,
-		freeListHead:  0, // invalid: points at header page
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    5,
+		freeListHead: 0, // invalid: points at header page
 	})
 
 	p := New(path).(*filePager)
@@ -720,11 +720,11 @@ func TestFreeListWalk_HeadOutOfRange(t *testing.T) {
 
 	// Create a file with pageCount=3, head pointing at page 10 (>= pageCount)
 	writeHeaderToFile(t, path, pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     3,
-		freeListHead:  10,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    3,
+		freeListHead: 10,
 	})
 
 	p := New(path).(*filePager)
@@ -753,11 +753,11 @@ func TestFreeListWalk_Cycle(t *testing.T) {
 
 	// Write header: pageCount=3, freeListHead=1
 	header := encodeHeader(pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     3,
-		freeListHead:  1,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    3,
+		freeListHead: 1,
 	})
 	if _, err := f.WriteAt(header, 0); err != nil {
 		t.Fatal(err)
@@ -801,11 +801,11 @@ func TestFreeListWalk_CorruptChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 	header := encodeHeader(pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     3,
-		freeListHead:  1,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    3,
+		freeListHead: 1,
 	})
 	if _, err := f.WriteAt(header, 0); err != nil {
 		t.Fatal(err)
@@ -842,11 +842,11 @@ func TestFreeListWalk_SelfCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	header := encodeHeader(pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     3,
-		freeListHead:  1,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    3,
+		freeListHead: 1,
 	})
 	if _, err := f.WriteAt(header, 0); err != nil {
 		t.Fatal(err)
@@ -876,11 +876,11 @@ func TestFreeListWalk_ValidFreeList(t *testing.T) {
 		t.Fatal(err)
 	}
 	header := encodeHeader(pagerHeader{
-		magic:         MagicNumber,
-		version:       FormatVersion,
-		pageSize:      PageSize,
-		pageCount:     4,
-		freeListHead:  1,
+		magic:        MagicNumber,
+		version:      FormatVersion,
+		pageSize:     PageSize,
+		pageCount:    4,
+		freeListHead: 1,
 	})
 	if _, err := f.WriteAt(header, 0); err != nil {
 		t.Fatal(err)
