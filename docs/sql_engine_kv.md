@@ -1,84 +1,65 @@
-# Plomvix SQL Engine KVStore
+# Plomvix SQL Engine: On-Disk KVStore (B+ Tree)
 
-The KVStore is a durable, ordered `[]byte→[]byte` key/value store for the
-Plomvix sql_engine. It is **key-format-agnostic** — it stores raw bytes and
-does not interpret tableIDs, versions, or any Feature 1 structure.
+The `kv` package (`internal/engine/sql/kv`) provides an on-disk, ordered
+key-value store built on the hardened pager (`internal/storage/pager`). It
+implements a page-based B+ Tree with multi-page atomicity via Write-Ahead
+Log (WAL) transactions.
 
-## Interface
+## Architecture
+
+- **Page 2** (MetaPageID): Permanently reserved meta page storing the root
+  page ID. Sentinel `0xFFFFFFFFFFFFFFFF` represents an empty tree.
+- **Leaf pages**: Store key-value pairs with NextLeafPtr for ordered scans.
+- **Internal pages**: Store separator keys and child page pointers.
+
+## Strict Limits
+
+- **Maximum key size**: 63 bytes.
+- **Maximum value size**: 512 bytes.
+- **Max leaf keys per page**: 7.
+- **Max internal keys per page**: 56.
+
+## Multi-page atomicity
+
+All tree mutations are wrapped in `pager.BeginTx()`/`CommitTx()`.
+
+### Known Trade-Off: Leaked Pages on Crash
+
+Page allocation happens OUTSIDE the KV transaction. If a crash occurs after
+allocation but before commit, pages are leaked (wasted space, no corruption).
+
+## 3-Phase Split Algorithm
+
+1. Phase 1: Traverse to leaf.
+2. Phase 2: Pre-allocate pages OUTSIDE transaction.
+3. Phase 3: Write node pages inside transaction, commit.
+
+## Upper Bound Routing Rule
+
+Find first index i where target < K[i]; follow C[i]. Else follow rightmost child.
+
+## No Internal Separator Updates on Delete
+
+Only leaf keys are removed. Internal separators are never updated.
+The upper_bound rule guarantees correct routing.
+
+## Concurrency
+
+`sync.RWMutex`: writes serialized, scans concurrent.
+
+## API
 
 ```go
 type KVStore interface {
-    Name() string
     Open(ctx context.Context) error
+    Get(ctx context.Context, k key.Key) ([]byte, error)
+    Set(ctx context.Context, k key.Key, v []byte) error
+    Delete(ctx context.Context, k key.Key) error
+    Scan(ctx context.Context, start, end key.Key) ([]Entry, error)
     Close(ctx context.Context) error
-    Get(ctx context.Context, key []byte) (value []byte, found bool, err error)
-    Set(ctx context.Context, key, value []byte) error
-    Delete(ctx context.Context, key []byte) error
-    Scan(ctx context.Context, start, end []byte, fn func(key, value []byte) error) error
-    NewBatch() Batch
-}
-
-type Batch interface {
-    Set(key, value []byte)
-    Delete(key []byte)
-    Commit(ctx context.Context) error
-    Reset()
 }
 ```
 
-## Semantics
+## Format version 2
 
-- **Get/Scan return copies** — callers may mutate returned slices freely.
-- **Scan is ordered, half-open `[start, end)`** — `start==nil` means from the
-  first key; `end==nil` means to the last key.
-- **Empty key** is invalid and returns `ErrEmptyKey`.
-- **Batch** accumulates Set/Delete ops in memory and applies them atomically
-  via `Commit`. Validation (including empty-key rejection) happens at Commit.
-  Double commit is a no-op. `Reset` discards uncommitted ops.
-- **Store state machine**: NeverOpened → Open → Closed. Never-opened ops
-  return `ErrNotOpen`; closed ops return `ErrClosed`; double open returns
-  `ErrAlreadyOpen`; `Open` after `Close` returns `ErrClosed`.
-- **Close transitions to Closed unconditionally** — even if `db.Close()`
-  returns an error, the store is marked closed.
-- **Context**: get/set/delete/scan/commit check `ctx.Err()` before starting a
-  bbolt transaction. Scan also checks between rows.
-
-## Basic Backend: bbolt
-
-The Basic tier uses [bbolt](https://github.com/etcd-io/bbolt) (v1.4.3).
-Keys are stored in a single fixed bucket `plomvix_sql`.
-
-### Configuration
-
-```toml
-[sql_engine]
-data_dir = "data/sql"
-backend  = "bbolt"
-```
-
-- `data_dir` — directory for the bbolt database file (`sql.db`).
-- `backend` — only `"bbolt"` is accepted in the Basic tier.
-
-### Construction
-
-```go
-s := kv.NewBBolt("sql", filepath.Join(cfg.SQL.DataDir, "sql.db"))
-```
-
-## Composition with Feature 1
-
-Feature 1 produces **ordered byte keys**. Feature 2 stores and **range-scans**
-them in that exact order. Together they enable:
-```go
-EncodeTableRowKey(...)  // Feature 1 → ordered bytes
-kv.Set(key, row)        // Feature 2 → durable storage
-kv.Scan(TablePrefix(7), TablePrefix(8), fn) // ordered scan of one table
-```
-
-## Non-Goals
-
-- No transaction policy (Begin/Commit/Rollback) — this is Feature 6
-- No key parsing or structural awareness
-- No MVCC version management
-- No Pebble backend (enterprise tier)
-- No reverse iteration (enterprise tier)
+Uses Enterprise pager files (FormatVersion 2).
