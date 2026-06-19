@@ -15,6 +15,9 @@
 4. **Column Ambiguity Guard:** In multi-table queries, unqualified columns (e.g. `id`) must be unique across all joined table schemas. If a column name is present in multiple tables and is unqualified in the query, the binder returns `ErrAmbiguousColumn` immediately.
 5. **No Plan Caching for Joins in Basic Tier:** Plans containing joins bypass plan caching entirely to avoid complex parameterized schema mapping in the basic tier.
 
+6. **All planner operators support Close/Open cycle:** All planner operators (e.g., `SeqScanNode`) must support `Close()` followed by `Open(ctx)` to allow correct nested-loop re-scanning.
+7. **Setup tier rejects LEFT JOIN:** Setup tier rejects `LEFT JOIN`, `RIGHT JOIN`, and `FULL OUTER JOIN`. Enterprise tier updates those expectations to accept `LEFT JOIN` and only reject `RIGHT`/`FULL`.
+
 ---
 
 ## Deliverables
@@ -96,35 +99,65 @@ func (ps PlannerSchema) ToEngineSchema() engine.Schema {
 	}
 	return engine.Schema{Columns: cols}
 }
+
+// PlannerSchemaFromEngineSchema wraps engine.Schema for backward compatibility.
+func PlannerSchemaFromEngineSchema(schema engine.Schema, tableAlias string) PlannerSchema {
+	fields := make([]SchemaField, len(schema.Columns))
+	for i, col := range schema.Columns {
+		fields[i] = SchemaField{Column: col, TableAlias: tableAlias}
+	}
+	return PlannerSchema{Fields: fields}
+}
+
+// GetPlannerSchema retrieves the PlannerSchema mapping for any operator,
+// falling back to a default un-aliased mapping if not explicitly tracked.
+func GetPlannerSchema(op Operator) PlannerSchema {
+	if po, ok := op.(interface{ PlannerSchema() PlannerSchema }); ok {
+		return po.PlannerSchema()
+	}
+	return PlannerSchemaFromEngineSchema(op.Schema(), "")
+}
 ```
 
 ### 2. `NestedLoopJoinNode` Operator (`internal/engine/sql/planner/join.go`)
 
 `NestedLoopJoinNode` couples left and right child operators under the Volcano framework.
 
+> [!NOTE]
+> Enterprise plan intentionally refactors this constructor to add `isLeftJoin` and `logger`; setup keeps the 3-arg constructor only for the basic tier.
+
 ```go
 type NestedLoopJoinNode struct {
-	left      Operator
-	right     Operator
-	cond      BoundExpr
-	outSchema engine.Schema
+	left          Operator
+	right         Operator
+	cond          BoundExpr
+	plannerSchema PlannerSchema
+	outSchema     engine.Schema
 
 	leftRow   engine.Row // Cached current row from the outer table
 }
 
 func NewNestedLoopJoinNode(left, right Operator, cond BoundExpr) *NestedLoopJoinNode {
-	// Build output schema as concatenation of left and right child schemas
-	leftSchema := left.Schema()
-	rightSchema := right.Schema()
-	
-	cols := append(leftSchema.Columns, rightSchema.Columns...)
-	
+	leftPS := GetPlannerSchema(left)
+	rightPS := GetPlannerSchema(right)
+
+	fields := make([]SchemaField, 0, len(leftPS.Fields)+len(rightPS.Fields))
+	fields = append(fields, leftPS.Fields...)
+	fields = append(fields, rightPS.Fields...)
+
+	plannerSchema := PlannerSchema{Fields: fields}
+
 	return &NestedLoopJoinNode{
-		left:      left,
-		right:     right,
-		cond:      cond,
-		outSchema: engine.Schema{Columns: cols},
+		left:          left,
+		right:         right,
+		cond:          cond,
+		plannerSchema: plannerSchema,
+		outSchema:     plannerSchema.ToEngineSchema(),
 	}
+}
+
+func (n *NestedLoopJoinNode) PlannerSchema() PlannerSchema {
+	return n.plannerSchema
 }
 
 func (n *NestedLoopJoinNode) Open(ctx context.Context) error {
@@ -136,10 +169,16 @@ func (n *NestedLoopJoinNode) Open(ctx context.Context) error {
 		return err
 	}
 
-	// Prime the outer loop
+	// Prime the outer loop safely
 	lr, err := n.left.Next(ctx)
 	if err != nil {
-		return err // Could be io.EOF if left is empty
+		if errors.Is(err, io.EOF) {
+			n.leftRow.Datums = nil
+			return nil
+		}
+		_ = n.left.Close()
+		_ = n.right.Close()
+		return err
 	}
 	n.leftRow = lr
 	return nil
@@ -147,8 +186,8 @@ func (n *NestedLoopJoinNode) Open(ctx context.Context) error {
 
 func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
 	for {
-		if n.leftRow == nil {
-			return nil, io.EOF
+		if n.leftRow.Datums == nil {
+			return engine.Row{}, io.EOF
 		}
 
 		rr, err := n.right.Next(ctx)
@@ -156,33 +195,39 @@ func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
 			if errors.Is(err, io.EOF) {
 				// Re-open the inner child relation
 				if err := n.right.Close(); err != nil {
-					return nil, err
+					return engine.Row{}, err
 				}
 				if err := n.right.Open(ctx); err != nil {
-					return nil, err
+					return engine.Row{}, err
 				}
 				
 				// Advance left child row
 				lr, err := n.left.Next(ctx)
 				if err != nil {
-					n.leftRow = nil // Ensure we return io.EOF on subsequent calls
-					return nil, err
+					n.leftRow.Datums = nil // Ensure we return io.EOF on subsequent calls
+					if errors.Is(err, io.EOF) {
+						return engine.Row{}, io.EOF
+					}
+					return engine.Row{}, err
 				}
 				n.leftRow = lr
 				continue
 			}
-			return nil, err
+			return engine.Row{}, err
 		}
 
-		// Concatenate matching tuple
-		joinedRow := make(engine.Row, len(n.leftRow)+len(rr))
-		copy(joinedRow, n.leftRow)
-		copy(joinedRow[len(n.leftRow):], rr)
+		// Concatenate matching tuple (joined rows have RowID == 0)
+		joinedRow := engine.Row{
+			Datums: make([]engine.Datum, 0, len(n.leftRow.Datums)+len(rr.Datums)),
+			RowID:  0, // Derived rows must not have a valid physical RowID
+		}
+		joinedRow.Datums = append(joinedRow.Datums, n.leftRow.Datums...)
+		joinedRow.Datums = append(joinedRow.Datums, rr.Datums...)
 
 		if n.cond != nil {
 			d, err := n.cond.Eval(joinedRow)
 			if err != nil {
-				return nil, err
+				return engine.Row{}, err
 			}
 			if b, ok := d.Value.(bool); ok && b {
 				return joinedRow, nil
@@ -195,7 +240,7 @@ func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
 }
 
 func (n *NestedLoopJoinNode) Close() error {
-	n.leftRow = nil
+	n.leftRow.Datums = nil
 	errL := n.left.Close()
 	errR := n.right.Close()
 	if errL != nil {
@@ -209,13 +254,39 @@ func (n *NestedLoopJoinNode) Schema() engine.Schema {
 }
 ```
 
+### 3. Binder Compatibility Interface (`internal/engine/sql/planner/binder.go`)
+
+To prevent breaking existing DML plans (UPDATE, DELETE) and single-table SELECT logic, we preserve the original `BindWhere` and `BindProjection` signatures. They internally delegate to the new qualified-column-aware implementations:
+
+```go
+func BindWhere(expr vitess.Expr, schema engine.Schema) (BoundExpr, error) {
+	return BindWherePlanner(expr, PlannerSchemaFromEngineSchema(schema, ""))
+}
+
+func BindWherePlanner(expr vitess.Expr, ps PlannerSchema) (BoundExpr, error) {
+	// New qualified-column implementation using ps.ResolveColumn
+}
+
+func BindProjection(exprs *vitess.SelectExprs, schema engine.Schema) ([]ProjectionExpr, engine.Schema, error) {
+	proj, ps, err := BindProjectionPlanner(exprs, PlannerSchemaFromEngineSchema(schema, ""))
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+	return proj, ps.ToEngineSchema(), nil
+}
+
+func BindProjectionPlanner(exprs *vitess.SelectExprs, ps PlannerSchema) ([]ProjectionExpr, PlannerSchema, error) {
+	// New qualified-column projection implementation returning new PlannerSchema
+}
+```
+
 ---
 
 ## Tasks
 
 1. **Create `PlannerSchema` Primitives:** Implement `PlannerSchema`, `SchemaField`, `ResolveColumn`, and validation helpers in `internal/engine/sql/planner/join.go`.
 2. **Implement `NestedLoopJoinNode`:** Code the Volcano operator in `internal/engine/sql/planner/join.go`, ensuring correct re-opening on inner relation EOF.
-3. **Refactor Binder for Qualified Columns:** Modify `binder.go` to accept `PlannerSchema` instead of `engine.Schema`. In the `*vitess.ColName` case of `BindWhere`, extract `e.Qualifier.Name.String()` and map it via `PlannerSchema.ResolveColumn(qualifier, name)`.
+3. **Refactor Binder for Qualified Columns:** Refactor `binder.go` to support qualified column mapping. Preserve the original `BindWhere(expr vitess.Expr, schema engine.Schema) (BoundExpr, error)` and `BindProjection(exprs *vitess.SelectExprs, schema engine.Schema) ([]ProjectionExpr, engine.Schema, error)` signatures (which internally call `PlannerSchemaFromEngineSchema` to avoid breaking single-table code and existing DML plans). Implement overloaded functions `BindWherePlanner(expr vitess.Expr, ps PlannerSchema) (BoundExpr, error)` and `BindProjectionPlanner(exprs *vitess.SelectExprs, ps PlannerSchema) ([]ProjectionExpr, PlannerSchema, error)` to handle `*vitess.ColName` table qualifiers via `ps.ResolveColumn(qualifier, name)`.
 4. **Extend Translation to Join Expressions:** Update `Translate` in `internal/engine/sql/planner/translate.go` to parse `*vitess.JoinTableExpr` (INNER JOIN ON). Recursively translate left and right tables into `SeqScanNode`s, bind the join predicate ON expression against the combined `PlannerSchema`, and construct the `NestedLoopJoinNode`.
 5. **Add Ambiguity Guards:** Assert that any unqualified select expression or WHERE reference matches exactly one field across the schemas; return `ErrAmbiguousColumn` otherwise.
 6. **Inner Join Setup Tests:** Write tests verifying:

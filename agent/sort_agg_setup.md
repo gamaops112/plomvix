@@ -1,4 +1,4 @@
-# Sorting and Aggregation Setup
+# Sorting and Aggregation Setup (Approved)
 
 | Field | Value |
 | :--- | :--- |
@@ -14,6 +14,7 @@
 3. **No Index-Based Sort optimization in Basic Tier:** Even if the underlying table heap or keyspace is sorted, `ORDER BY` always translates to an explicit `SortNode` in the Volcano operator tree. Optimization to bypass sorting via index scans is deferred.
 4. **Limited Expressions in Grouping/Ordering:** Grouping and ordering criteria are strictly limited to direct column names (e.g. `GROUP BY age`, `ORDER BY name ASC`). Ordering/grouping by expressions, aliases, or function calls (e.g. `ORDER BY age + 1`) returns `ErrUnsupportedFeature`.
 5. **LIMIT and OFFSET bounds:** `LimitNode` handles pagination. If `OFFSET` is specified, the operator drains that many rows from its child before yielding results. Large offsets can consume substantial processing time, as all skipped rows must still be scanned and decoded.
+6. **Group Key Collision Guard:** When serializing group keys for the hash aggregation map, the serialization format must be collision-free (e.g., using length-prefixed formatting for variable-length types like strings and bytes, or guaranteeing that the delimiter does not collide with the serialized output) to prevent distinct grouping sets from merging.
 
 ---
 
@@ -92,7 +93,7 @@ func (n *SortNode) Open(ctx context.Context) error {
 	sort.SliceStable(rows, func(i, j int) bool {
 		r1, r2 := rows[i], rows[j]
 		for _, key := range n.keys {
-			d1, d2 := r1[key.ColIdx], r2[key.ColIdx]
+			d1, d2 := r1.Datums[key.ColIdx], r2.Datums[key.ColIdx]
 			if datumEqual(d1, d2) {
 				continue
 			}
@@ -113,10 +114,10 @@ func (n *SortNode) Open(ctx context.Context) error {
 
 func (n *SortNode) Next(ctx context.Context) (engine.Row, error) {
 	if !n.opened {
-		return nil, io.EOF
+		return engine.Row{}, io.EOF
 	}
 	if n.rowIdx >= len(n.rows) {
-		return nil, io.EOF
+		return engine.Row{}, io.EOF
 	}
 	r := n.rows[n.rowIdx]
 	n.rowIdx++
@@ -152,19 +153,230 @@ type AggRequest struct {
 	ColIdx int // Index of column to aggregate, -1 for COUNT(*)
 }
 
+type aggAccumulator struct {
+	op     AggOp
+	count  int64
+	sum    engine.Datum // Accumulates SUM (float64 or int64)
+	min    engine.Datum // Accumulates MIN
+	max    engine.Datum // Accumulates MAX
+	hasVal bool         // True if at least one non-NULL value has been accumulated
+}
+
+func (acc *aggAccumulator) accumulate(val engine.Datum) {
+	if acc.op == AggCount {
+		// COUNT(*) has ColIdx == -1, val.Value is nil, but we still count it
+		if val.Value != nil || val.Type == 0 { // COUNT(*) or COUNT(col) where col is not NULL
+			acc.count++
+		}
+		return
+	}
+
+	// SUM, MIN, MAX ignore NULL values
+	if val.Value == nil {
+		return
+	}
+
+	if !acc.hasVal {
+		acc.sum = val.DeepCopy()
+		acc.min = val.DeepCopy()
+		acc.max = val.DeepCopy()
+		acc.hasVal = true
+		return
+	}
+
+	switch acc.op {
+	case AggSum:
+		acc.sum = addDatums(acc.sum, val)
+	case AggMin:
+		if datumLess(val, acc.min) {
+			acc.min = val.DeepCopy()
+		}
+	case AggMax:
+		if datumLess(acc.max, val) {
+			acc.max = val.DeepCopy()
+		}
+	}
+}
+
+func (acc *aggAccumulator) result() engine.Datum {
+	if acc.op == AggCount {
+		return engine.Datum{Type: engine.TypeInt64, Value: acc.count}
+	}
+	if !acc.hasVal {
+		return engine.Datum{Type: engine.TypeNull, Value: nil}
+	}
+	switch acc.op {
+	case AggSum:
+		return acc.sum
+	case AggMin:
+		return acc.min
+	case AggMax:
+		return acc.max
+	}
+	return engine.Datum{Type: engine.TypeNull, Value: nil}
+}
+
 type HashAggNode struct {
 	child      Operator
 	groupKeys  []int        // Indices of GROUP BY columns
 	aggs       []AggRequest // List of aggregations to compute
 	outSchema  engine.Schema
 
-	// Group-by state mapping: serialized grouping key values -> accumulator states
+	// Group-by state mapping
 	groups     []engine.Row // Unique groups output list
 	aggResults []engine.Row // Aggregate values matched index-for-index with groups
 	outputIdx  int
 	opened     bool
 }
+
+func NewHashAggNode(child Operator, groupKeys []int, aggs []AggRequest) *HashAggNode {
+	// ... (Schema derivation logic: group keys followed by aggregates)
+	return &HashAggNode{
+		child:     child,
+		groupKeys: groupKeys,
+		aggs:      aggs,
+	}
+}
+
+func (n *HashAggNode) Open(ctx context.Context) error {
+	if err := n.child.Open(ctx); err != nil {
+		return err
+	}
+
+	n.groups = nil
+	n.aggResults = nil
+	n.outputIdx = 0
+
+	// Serialized group key string -> list of accumulators
+	groupMap := make(map[string][]aggAccumulator)
+	var groupRows []engine.Row
+
+	for {
+		row, err := n.child.Next(ctx)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			_ = n.child.Close()
+			return err
+		}
+
+		// Extract group key
+		var keyParts []string
+		var groupRow engine.Row
+		groupRow.Datums = make([]engine.Datum, len(n.groupKeys))
+		for idx, gKey := range n.groupKeys {
+			d := row.Datums[gKey]
+			groupRow.Datums[idx] = d
+			keyParts = append(keyParts, serializeDatum(d))
+		}
+		groupKeyStr := joinKeys(keyParts)
+
+		accums, exists := groupMap[groupKeyStr]
+		if !exists {
+			accums = make([]aggAccumulator, len(n.aggs))
+			for i, agg := range n.aggs {
+				accums[i] = aggAccumulator{op: agg.Op}
+			}
+			groupMap[groupKeyStr] = accums
+			groupRows = append(groupRows, groupRow)
+		}
+
+		// Accumulate row values
+		for i, agg := range n.aggs {
+			var val engine.Datum
+			if agg.ColIdx >= 0 {
+				val = row.Datums[agg.ColIdx]
+			}
+			accums[i].accumulate(val)
+		}
+	}
+
+	// Build output lists
+	n.groups = groupRows
+	n.aggResults = make([]engine.Row, len(groupRows))
+	for i, gr := range groupRows {
+		var keyParts []string
+		for _, d := range gr.Datums {
+			keyParts = append(keyParts, serializeDatum(d))
+		}
+		accums := groupMap[joinKeys(keyParts)]
+
+		var aggRow engine.Row
+		aggRow.Datums = make([]engine.Datum, len(n.aggs))
+		for j, acc := range accums {
+			aggRow.Datums[j] = acc.result()
+		}
+		n.aggResults[i] = aggRow
+	}
+
+	n.opened = true
+	return nil
+}
+
+func (n *HashAggNode) Next(ctx context.Context) (engine.Row, error) {
+	if !n.opened {
+		return engine.Row{}, io.EOF
+	}
+	if n.outputIdx >= len(n.groups) {
+		// Aggregate without GROUP BY on empty child returns 1 row with default aggregates
+		if len(n.groupKeys) == 0 && len(n.groups) == 0 && n.outputIdx == 0 {
+			n.outputIdx++
+			var aggRow engine.Row
+			aggRow.Datums = make([]engine.Datum, len(n.aggs))
+			for i, agg := range n.aggs {
+				acc := aggAccumulator{op: agg.Op}
+				aggRow.Datums[i] = acc.result()
+			}
+			return aggRow, nil
+		}
+		return engine.Row{}, io.EOF
+	}
+
+	gr := n.groups[n.outputIdx]
+	ar := n.aggResults[n.outputIdx]
+	n.outputIdx++
+
+	// Combine group keys and aggregations
+	out := engine.Row{
+		Datums: make([]engine.Datum, 0, len(gr.Datums)+len(ar.Datums)),
+		RowID:  0,
+	}
+	out.Datums = append(out.Datums, gr.Datums...)
+	out.Datums = append(out.Datums, ar.Datums...)
+	return out, nil
+}
+
+func (n *HashAggNode) Close() error {
+	n.groups = nil
+	n.aggResults = nil
+	n.opened = false
+	return n.child.Close()
+}
+
+func (n *HashAggNode) Schema() engine.Schema {
+	return n.outSchema.DeepCopy()
+}
 ```
+
+### 3. SQL Semantics & Edge Cases
+
+To ensure correct and standard SQL evaluation, the following rules apply:
+
+1. **NULL Handling in Sorting:** 
+   - `NULL` values are treated as the lowest possible value.
+   - For ascending order (`ASC`), `NULL` values appear first.
+   - For descending order (`DESC`), `NULL` values appear last.
+   - The type comparison helper `datumLess` must order `NULL` before any non-NULL value.
+
+2. **NULL Handling in Aggregations:**
+   - `COUNT(column)` must ignore `NULL` values (i.e. do not increment counts when the column value is `NULL`).
+   - `COUNT(*)` counts all rows including those with `NULL` columns.
+   - `SUM`, `MIN`, and `MAX` must ignore `NULL` values. If all values in a given group are `NULL` (or if the input relation is empty), `SUM`, `MIN`, and `MAX` must return `NULL` (represented as `engine.Datum` with value `nil` and type `TypeNull` / appropriate data type), not `0`.
+
+3. **Type Promotion / Overflow in SUM:**
+   - For the basic setup tier, `SUM` on `INT64` preserves type but wraps on integer overflow. For float fields, it accumulates as `FLOAT64`.
+   - In the Enterprise tier, `SUM` accumulates integers in a wider range or returns an overflow error on exceeding range limits.
 
 ---
 

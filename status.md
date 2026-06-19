@@ -19,8 +19,8 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 | | 26a - 26b | Router & Planner (Setup + Enterprise) | `internal/router`, `.../planner` | ✅ **Done** | Volcano model, Plan Cache, Schema Pinning. |
 | **4. The Write Path**<br>*(Immediate Next)* | 27 | **DDL Execution** (`CREATE` / `DROP`) | `internal/engine/sql/exec` | ✅ **Done** | Unblocks schema creation. Writes to Catalog. |
 | | 28 | **DML Execution** (`INSERT` / `UPDATE` / `DELETE`) | `internal/engine/sql/exec` | ✅ **Ready for Coding** | Unblocks data insertion. Uses MVCC timestamps. |
-| **5. Advanced Execution** | 29 | Joins & Multi-Table Execution | `.../planner`, `.../exec` | 🔲 **Drafted (Pending Review)** | Nested Loop & Hash Joins. |
-| | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | 🔲 **Drafted (Pending Review)** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
+| **5. Advanced Execution** | 29 | Joins & Multi-Table Execution | `.../planner`, `.../exec` | ✅ **Ready for Coding** | Nested Loop & Hash Joins. |
+| | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Ready for Coding** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
 | **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | 🔮 **Future** | Postgres Simple Query or Custom TCP. |
 
 ***
@@ -37,6 +37,4 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 ***
 
 ### 🎯 Immediate Action Items
-1. **Execute Plan 28 (DML Execution):** Hand the finalized DML designs (INSERT, UPDATE, DELETE) to the coding agent.
-2. **Review Plans 29 & 30 (Joins & Sorting):** Review and approve the newly drafted plans for multi-table execution and aggregation.
-3. **Execute Plan 27 (DDL Execution):** Hand the completed DDL designs to the coding agent.
+1. **Execute Plans 28, 29, & 30 (DML, Joins, & Sorting/Aggregation Execution):** Hand the approved DML, Joins, and Sorting/Aggregation execution plans to the coding agent.

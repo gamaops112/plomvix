@@ -100,55 +100,65 @@ type ProjectionExpr struct {
 }
 
 // BindWhere walks a Vitess expression and returns a BoundExpr.
+// Kept for backward compatibility with existing single-table callers.
 func BindWhere(expr vitess.Expr, schema engine.Schema) (BoundExpr, error) {
+	return BindWherePlanner(expr, PlannerSchemaFromEngineSchema(schema, ""))
+}
+
+// BindWherePlanner walks a Vitess expression and returns a BoundExpr using
+// PlannerSchema for qualified column resolution.
+func BindWherePlanner(expr vitess.Expr, ps PlannerSchema) (BoundExpr, error) {
 	if expr == nil {
 		return nil, nil
 	}
 	switch e := expr.(type) {
 	case *vitess.ComparisonExpr:
-		// IN list: WHERE col IN (1, 2, 3)
 		if e.Operator == vitess.InOp {
-			return bindInPredicate(e, schema)
+			return bindInPredicatePlanner(e, ps)
 		}
-		left, err := BindWhere(e.Left, schema)
+		left, err := BindWherePlanner(e.Left, ps)
 		if err != nil {
 			return nil, err
 		}
-		right, err := BindWhere(e.Right, schema)
+		right, err := BindWherePlanner(e.Right, ps)
 		if err != nil {
 			return nil, err
 		}
 		op := comparisonOpString(e.Operator)
 		return &cmpExpr{left: left, right: right, op: op}, nil
 	case *vitess.BetweenExpr:
-		// BETWEEN: WHERE col BETWEEN lo AND hi
-		return bindBetweenPredicate(e, schema)
+		return bindBetweenPredicatePlanner(e, ps)
 	case *vitess.AndExpr:
-		left, err := BindWhere(e.Left, schema)
+		left, err := BindWherePlanner(e.Left, ps)
 		if err != nil {
 			return nil, err
 		}
-		right, err := BindWhere(e.Right, schema)
+		right, err := BindWherePlanner(e.Right, ps)
 		if err != nil {
 			return nil, err
 		}
 		return &boolExpr{left: left, right: right, op: "and"}, nil
 	case *vitess.OrExpr:
-		left, err := BindWhere(e.Left, schema)
+		left, err := BindWherePlanner(e.Left, ps)
 		if err != nil {
 			return nil, err
 		}
-		right, err := BindWhere(e.Right, schema)
+		right, err := BindWherePlanner(e.Right, ps)
 		if err != nil {
 			return nil, err
 		}
 		return &boolExpr{left: left, right: right, op: "or"}, nil
 	case *vitess.ColName:
-		idx := colIndex(e.Name.String(), schema)
-		if idx < 0 {
-			return nil, fmt.Errorf("planner: column %q not found", e.Name.String())
+		qualifier := e.Qualifier.Name.String()
+		name := e.Name.String()
+		idx, err := ps.ResolveColumn(qualifier, name)
+		if err != nil {
+			if err == ErrAmbiguousColumn || err == ErrColumnNotFound {
+				return nil, fmt.Errorf("planner: %w: %q", err, e.Name.String())
+			}
+			return nil, err
 		}
-		return &colRef{idx: idx, typ: schema.Columns[idx].Type}, nil
+		return &colRef{idx: idx, typ: ps.Fields[idx].Type}, nil
 	case *vitess.Literal:
 		return bindLiteral(e)
 	default:
@@ -170,18 +180,28 @@ func comparisonOpString(op vitess.ComparisonExprOperator) string {
 }
 
 // BindProjection maps select expressions to output columns.
+// Kept for backward compatibility with existing single-table callers.
 func BindProjection(exprs *vitess.SelectExprs, schema engine.Schema) ([]ProjectionExpr, engine.Schema, error) {
+	proj, ps, err := BindProjectionPlanner(exprs, PlannerSchemaFromEngineSchema(schema, ""))
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+	return proj, ps.ToEngineSchema(), nil
+}
+
+// BindProjectionPlanner maps select expressions using PlannerSchema.
+func BindProjectionPlanner(exprs *vitess.SelectExprs, ps PlannerSchema) ([]ProjectionExpr, PlannerSchema, error) {
 	var projs []ProjectionExpr
 	var outCols []engine.Column
 
 	for _, expr := range exprs.Exprs {
 		ae, ok := expr.(*vitess.AliasedExpr)
 		if !ok {
-			return nil, engine.Schema{}, fmt.Errorf("%w: non-aliased select expr", ErrUnsupportedFeature)
+			return nil, PlannerSchema{}, fmt.Errorf("%w: non-aliased select expr", ErrUnsupportedFeature)
 		}
-		bound, err := BindWhere(ae.Expr, schema)
+		bound, err := BindWherePlanner(ae.Expr, ps)
 		if err != nil {
-			return nil, engine.Schema{}, err
+			return nil, PlannerSchema{}, err
 		}
 		colName := ae.As.String()
 		if colName == "" {
@@ -199,7 +219,8 @@ func BindProjection(exprs *vitess.SelectExprs, schema engine.Schema) ([]Projecti
 		outCols = append(outCols, col)
 		projs = append(projs, ProjectionExpr{Expr: bound, Col: col})
 	}
-	return projs, engine.Schema{Columns: outCols}, nil
+	outSchema := engine.Schema{Columns: outCols}
+	return projs, PlannerSchemaFromEngineSchema(outSchema, ""), nil
 }
 
 func bindLiteral(lit *vitess.Literal) (BoundExpr, error) {
@@ -268,7 +289,25 @@ func bindInPredicate(e *vitess.ComparisonExpr, schema engine.Schema) (BoundExpr,
 	if idx < 0 {
 		return nil, fmt.Errorf("planner: IN column %q not found", colName.Name.String())
 	}
-	tuple, ok := e.Right.(vitess.ValTuple)
+	return bindInPredicateFromExpr(e.Right, idx)
+}
+
+func bindInPredicatePlanner(e *vitess.ComparisonExpr, ps PlannerSchema) (BoundExpr, error) {
+	colName, ok := e.Left.(*vitess.ColName)
+	if !ok {
+		return nil, fmt.Errorf("%w: IN requires column reference", ErrUnsupportedFeature)
+	}
+	qualifier := colName.Qualifier.Name.String()
+	name := colName.Name.String()
+	idx, err := ps.ResolveColumn(qualifier, name)
+	if err != nil {
+		return nil, fmt.Errorf("planner: %w: %q", err, colName.Name.String())
+	}
+	return bindInPredicateFromExpr(e.Right, idx)
+}
+
+func bindInPredicateFromExpr(right vitess.Expr, idx int) (BoundExpr, error) {
+	tuple, ok := right.(vitess.ValTuple)
 	if !ok {
 		return nil, fmt.Errorf("%w: IN requires literal tuple", ErrUnsupportedFeature)
 	}
@@ -292,11 +331,29 @@ func bindBetweenPredicate(e *vitess.BetweenExpr, schema engine.Schema) (BoundExp
 	if idx < 0 {
 		return nil, fmt.Errorf("planner: BETWEEN column %q not found", colName.Name.String())
 	}
-	loLit, ok := e.From.(*vitess.Literal)
+	return bindBetweenPredicateFromBounds(e.From, e.To, idx)
+}
+
+func bindBetweenPredicatePlanner(e *vitess.BetweenExpr, ps PlannerSchema) (BoundExpr, error) {
+	colName, ok := e.Left.(*vitess.ColName)
+	if !ok {
+		return nil, fmt.Errorf("%w: BETWEEN requires column reference", ErrUnsupportedFeature)
+	}
+	qualifier := colName.Qualifier.Name.String()
+	name := colName.Name.String()
+	idx, err := ps.ResolveColumn(qualifier, name)
+	if err != nil {
+		return nil, fmt.Errorf("planner: %w: %q", err, colName.Name.String())
+	}
+	return bindBetweenPredicateFromBounds(e.From, e.To, idx)
+}
+
+func bindBetweenPredicateFromBounds(from, to vitess.Expr, idx int) (BoundExpr, error) {
+	loLit, ok := from.(*vitess.Literal)
 	if !ok {
 		return nil, fmt.Errorf("%w: BETWEEN requires literal bounds", ErrUnsupportedFeature)
 	}
-	hiLit, ok := e.To.(*vitess.Literal)
+	hiLit, ok := to.(*vitess.Literal)
 	if !ok {
 		return nil, fmt.Errorf("%w: BETWEEN requires literal bounds", ErrUnsupportedFeature)
 	}

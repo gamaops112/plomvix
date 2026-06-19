@@ -89,37 +89,21 @@ func Translate(
 	req *engine.Request,
 ) (Operator, error) {
 	stmt := req.Stmt
-	targetTables := stmt.TargetTables()
-	if len(targetTables) > 1 {
+	sel, ok := stmt.RawAST().(*vitess.Select)
+	if !ok {
 		return nil, ErrUnsupportedFeature
 	}
 
-	// Get the single table.
-	tableName := targetTables[0]
-	info, err := cat.GetTable(ctx, tableName)
+	// Handle FROM clause: support single table and JOINs.
+	op, engSchema, err := translateFrom(ctx, cat, tables, decoder, req, sel.From)
 	if err != nil {
 		return nil, err
 	}
-
-	// Decode the schema.
-	engSchema, err := schema.Decode(info.SchemaPayload)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get the table heap.
-	heap, err := tables.GetTableHeap(info.TableID)
-	if err != nil {
-		return nil, ErrTableHeapNotFound
-	}
-
-	// Build the operator tree.
-	var op Operator = NewSeqScanNode(heap, decoder, engSchema, req.TxContext)
 
 	// Bind WHERE clause if present.
-	sel, ok := stmt.RawAST().(*vitess.Select)
-	if ok && sel.Where != nil {
-		pred, bindErr := BindWhere(sel.Where.Expr, engSchema)
+	if sel.Where != nil {
+		ps := GetPlannerSchema(op)
+		pred, bindErr := BindWherePlanner(sel.Where.Expr, ps)
 		if bindErr != nil {
 			return nil, bindErr
 		}
@@ -129,13 +113,133 @@ func Translate(
 	}
 
 	// Bind projections.
-	if ok && sel.SelectExprs != nil {
-		projs, outSchema, bindErr := BindProjection(sel.SelectExprs, engSchema)
+	if sel.SelectExprs != nil {
+		ps := GetPlannerSchema(op)
+		projs, outSchema, bindErr := BindProjectionPlanner(sel.SelectExprs, ps)
 		if bindErr != nil {
 			return nil, bindErr
 		}
-		op = NewProjectNode(op, projs, outSchema)
+		op = NewProjectNode(op, projs, outSchema.ToEngineSchema())
+	} else {
+		_ = engSchema
 	}
 
 	return op, nil
+}
+
+// translateFrom recursively translates a Vitess TableExpr into a Volcano operator.
+func translateFrom(
+	ctx context.Context,
+	cat catalog.Catalog,
+	tables TableRegistry,
+	decoder RowDecoder,
+	req *engine.Request,
+	from vitess.TableExprs,
+) (Operator, engine.Schema, error) {
+	if len(from) == 0 {
+		return nil, engine.Schema{}, ErrUnsupportedFeature
+	}
+	if len(from) == 1 {
+		return translateTableExpr(ctx, cat, tables, decoder, req, from[0])
+	}
+	// Multiple tables (implicit cross join): translate leftmost, then join rest.
+	left, _, err := translateTableExpr(ctx, cat, tables, decoder, req, from[0])
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+	for _, te := range from[1:] {
+		right, _, err := translateTableExpr(ctx, cat, tables, decoder, req, te)
+		if err != nil {
+			return nil, engine.Schema{}, err
+		}
+		left = NewNestedLoopJoinNode(left, right, nil)
+	}
+	return left, GetPlannerSchema(left).ToEngineSchema(), nil
+}
+
+// translateTableExpr translates a single TableExpr (simple table or join).
+func translateTableExpr(
+	ctx context.Context,
+	cat catalog.Catalog,
+	tables TableRegistry,
+	decoder RowDecoder,
+	req *engine.Request,
+	te vitess.TableExpr,
+) (Operator, engine.Schema, error) {
+	switch expr := te.(type) {
+	case *vitess.AliasedTableExpr:
+		return translateAliasedTable(ctx, cat, tables, decoder, req, expr)
+	case *vitess.JoinTableExpr:
+		return translateJoinTableExpr(ctx, cat, tables, decoder, req, expr)
+	default:
+		return nil, engine.Schema{}, ErrUnsupportedFeature
+	}
+}
+
+// translateAliasedTable translates a simple table reference.
+func translateAliasedTable(
+	ctx context.Context,
+	cat catalog.Catalog,
+	tables TableRegistry,
+	decoder RowDecoder,
+	req *engine.Request,
+	ate *vitess.AliasedTableExpr,
+) (Operator, engine.Schema, error) {
+	tname, ok := ate.Expr.(vitess.TableName)
+	if !ok {
+		return nil, engine.Schema{}, ErrUnsupportedFeature
+	}
+	name := tname.Name.String()
+	if name == "" {
+		return nil, engine.Schema{}, ErrUnsupportedFeature
+	}
+	info, err := cat.GetTable(ctx, name)
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+	engSchema, err := schema.Decode(info.SchemaPayload)
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+	heap, err := tables.GetTableHeap(info.TableID)
+	if err != nil {
+		return nil, engine.Schema{}, ErrTableHeapNotFound
+	}
+	op := NewSeqScanNode(heap, decoder, engSchema, req.TxContext)
+	return op, engSchema, nil
+}
+
+// translateJoinTableExpr translates a JOIN expression.
+func translateJoinTableExpr(
+	ctx context.Context,
+	cat catalog.Catalog,
+	tables TableRegistry,
+	decoder RowDecoder,
+	req *engine.Request,
+	jte *vitess.JoinTableExpr,
+) (Operator, engine.Schema, error) {
+	left, _, err := translateTableExpr(ctx, cat, tables, decoder, req, jte.LeftExpr)
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+	right, _, err := translateTableExpr(ctx, cat, tables, decoder, req, jte.RightExpr)
+	if err != nil {
+		return nil, engine.Schema{}, err
+	}
+
+	var cond BoundExpr
+	if jte.Condition.On != nil {
+		ps := GetPlannerSchema(left)
+		rps := GetPlannerSchema(right)
+		combined := PlannerSchema{Fields: make([]SchemaField, 0, len(ps.Fields)+len(rps.Fields))}
+		combined.Fields = append(combined.Fields, ps.Fields...)
+		combined.Fields = append(combined.Fields, rps.Fields...)
+		cond, err = BindWherePlanner(jte.Condition.On, combined)
+		if err != nil {
+			return nil, engine.Schema{}, err
+		}
+	}
+
+	op := NewNestedLoopJoinNode(left, right, cond)
+	return op, GetPlannerSchema(op).ToEngineSchema(), nil
 }

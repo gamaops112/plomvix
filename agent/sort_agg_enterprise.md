@@ -1,4 +1,4 @@
-# Sorting and Aggregation Enterprise
+# Sorting and Aggregation Enterprise (Approved)
 
 | Field | Value |
 | :--- | :--- |
@@ -10,8 +10,8 @@
 ## Honest Contracts & Known Trade-offs
 
 1. **Disk-Spill External Sort I/O penalty:** If the size of the buffered row dataset exceeds the configurable memory threshold `SQLEngineConfig.MaxSortMemoryBytes` (default 64MB), the operator (`ExternalSortNode`) splits rows into chunks, sorts them, serializes them, and writes them to temporary run files in the workspace directory. Merging runs uses a Priority Queue (min-heap). While this guarantees protection against OOM, it introduces significant disk I/O latency.
-2. **Temporary File Management:** Temporary run files are created in the workspace directory (e.g. `scratch/sort-runs/`). They must be eagerly cleaned up when `Close()` is called. If the query execution crashes abruptly, orphaned run files must be swept and pruned during engine boot.
-3. **Stream Aggregation selection requires sorted input:** The optimizer will select the stream aggregation operator (`SortAggNode`) instead of `HashAggNode` only if the child operator guarantees sorted output matching the grouping keys (e.g. via index scan or prior sort node). `SortAggNode` aggregates grouped fields on-the-fly with O(1) auxiliary memory.
+2. **Temporary File Management & Configuration:** Temporary run files are created in a dedicated scratch directory. The `tempDir` path must be derived from the global SQL Engine configuration (e.g. `SQLEngineConfig.ScratchDir`) and injected into the `ExternalSortNode` during operator tree construction. They must be eagerly cleaned up when `Close()` is called. If the query execution crashes abruptly, orphaned run files must be swept and pruned during engine boot.
+3. **Stream Aggregation selection requires sorted input:** The optimizer will select the stream aggregation operator (`StreamAggNode`) instead of `HashAggNode` only if the child operator guarantees sorted output matching the grouping keys (e.g. via index scan or prior sort node). `StreamAggNode` aggregates grouped fields on-the-fly with O(1) auxiliary memory.
 4. **No hybrid hashing for aggregates:** If aggregation grouping keys do not match child sorted order, it falls back to the in-memory `HashAggNode`. Hybrid hash aggregation (spilling aggregate buckets to disk) is deferred to a future clustering execution plan.
 5. **Detailed Telemetry is emitted:** All sort and aggregate operations emit execution telemetry via slog `INFO` records at `Close()`. This includes: sorting type (In-memory vs External), count of temporary files created, spill volume in bytes, and execution duration.
 
@@ -22,7 +22,7 @@
 | File | Purpose |
 | :--- | :--- |
 | `internal/engine/sql/planner/external_sort.go` | Implement `ExternalSortNode` with priority queue merge and run file serialization. |
-| `internal/engine/sql/planner/stream_agg.go` | Implement `SortAggNode` for streaming, sorted-input aggregation. |
+| `internal/engine/sql/planner/stream_agg.go` | Implement `StreamAggNode` for streaming, sorted-input aggregation. |
 | `internal/engine/sql/planner/optimizer.go` | Update optimizer to switch between `HashAgg` vs `SortAgg`, and `Sort` vs `ExternalSort` based on memory estimations. |
 | `internal/engine/sql/planner/sort_agg_enterprise_test.go` | Benchmarks comparing sort vs external sort, tests verifying temporary file cleanup, memory foot-print metrics for stream aggregation, and telemetry assertions. |
 
@@ -54,7 +54,7 @@ type ExternalSortNode struct {
 	outSchema  engine.Schema
 
 	// Run management
-	tempDir   string
+	tempDir   string // Injected from SQLEngineConfig.ScratchDir during plan translation
 	runFiles  []*os.File
 	readers   []*runReader
 	pq        *sortPriorityQueue
@@ -73,7 +73,7 @@ type runReader struct {
 
 func (r *runReader) ReadRow() (engine.Row, error) {
 	// Custom binary deserializer for run files
-	return nil, nil
+	return engine.Row{}, nil
 }
 
 // sortPriorityQueue implements container/heap.Interface for merging sorted runs
@@ -94,12 +94,12 @@ func (pq sortPriorityQueue) Less(i, j int) bool {
 }
 ```
 
-### 2. `SortAggNode` Operator (`internal/engine/sql/planner/stream_agg.go`)
+### 2. `StreamAggNode` Operator (`internal/engine/sql/planner/stream_agg.go`)
 
-`SortAggNode` aggregates contiguous matching groupings, eliminating map lookups.
+`StreamAggNode` aggregates contiguous matching groupings, eliminating map lookups.
 
 ```go
-type SortAggNode struct {
+type StreamAggNode struct {
 	child     Operator
 	groupKeys []int
 	aggs      []AggRequest
@@ -109,23 +109,23 @@ type SortAggNode struct {
 	accumulators []aggAccumulator // Trackers for COUNT, SUM, etc.
 }
 
-func (n *SortAggNode) Next(ctx context.Context) (engine.Row, error) {
+func (n *StreamAggNode) Next(ctx context.Context) (engine.Row, error) {
 	for {
 		r, err := n.child.Next(ctx)
 		if err != nil {
 			if err == io.EOF {
-				if n.activeGroup == nil {
-					return nil, io.EOF
+				if n.activeGroup.Datums == nil {
+					return engine.Row{}, io.EOF
 				}
 				// Yield final group bucket
 				res := n.buildResultRow(n.activeGroup)
-				n.activeGroup = nil
+				n.activeGroup.Datums = nil
 				return res, nil
 			}
-			return nil, err
+			return engine.Row{}, err
 		}
 
-		if n.activeGroup == nil {
+		if n.activeGroup.Datums == nil {
 			n.activeGroup = n.extractGroupKey(r)
 			n.resetAccumulators()
 			n.accumulate(r)
@@ -153,11 +153,11 @@ func (n *SortAggNode) Next(ctx context.Context) (engine.Row, error) {
 ## Tasks
 
 1. **Implement `ExternalSortNode`:** Code file-based chunk sorting. Serialize rows to binary run files, and implement priority queue k-way merge matching sorting keys.
-2. **Implement `SortAggNode`:** Implement stream aggregation executing O(1) auxiliary memory grouping on pre-sorted child rows.
+2. **Implement `StreamAggNode`:** Implement stream aggregation executing O(1) auxiliary memory grouping on pre-sorted child rows.
 3. **Update Optimizer Decisions:** Update join/sort optimization logic:
    - Estimate input sizes using Catalog.
    - If estimated size exceeds `MaxSortMemoryBytes`, select `ExternalSortNode`.
-   - If input operator guarantees grouping-key sort order, select `SortAggNode`.
+   - If input operator guarantees grouping-key sort order, select `StreamAggNode`.
 4. **Cleanup Run Files:** Ensure `Close()` calls in `external_sort.go` close all files and delete temporary directories eagerly.
 5. **Add Temporary File Boot Sweeper:** Update SQL Engine bootstrap lifecycle to detect and prune orphaned run files from previous aborted query executions.
 6. **Enterprise Tests & Benchmarks:** Benchmarks demonstrating:
@@ -171,7 +171,7 @@ func (n *SortAggNode) Next(ctx context.Context) (engine.Row, error) {
 ## Completion Criteria
 
 - [ ] `ExternalSortNode` sorts datasets exceeding memory limits by spilling runs to disk.
-- [ ] `SortAggNode` performs aggregation in O(1) memory on pre-sorted data.
+- [ ] `StreamAggNode` performs aggregation in O(1) memory on pre-sorted data.
 - [ ] Run files are deleted eagerly when the sort operator closes.
 - [ ] Orphaned run files are pruned on engine startup.
 - [ ] Benchmark comparison confirms performance characteristics.
