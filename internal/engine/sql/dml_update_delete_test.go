@@ -8,7 +8,8 @@ import (
 	"github.com/plomvix/plomvix/internal/engine"
 )
 
-// TestDML_DeleteWhereRequired validates DELETE without WHERE is rejected.
+// TestDML_DeleteWhereRequired validates DELETE without WHERE is rejected
+// with ErrDeleteAllRequiresConfirmation (enterprise behavior).
 func TestDML_DeleteWhereRequired(t *testing.T) {
 	eng, _, adminUI, cleanup := newTestSQLEngine(t)
 	defer cleanup()
@@ -27,8 +28,8 @@ func TestDML_DeleteWhereRequired(t *testing.T) {
 
 	deleteStmt := parseStmt(t, "DELETE FROM del_where")
 	_, err = eng.Execute(ctx, &engine.Request{Stmt: deleteStmt, UserID: adminUI.UserID})
-	if err != ErrWhereRequired {
-		t.Errorf("got %v, want ErrWhereRequired", err)
+	if err != ErrDeleteAllRequiresConfirmation {
+		t.Errorf("got %v, want ErrDeleteAllRequiresConfirmation", err)
 	}
 }
 
