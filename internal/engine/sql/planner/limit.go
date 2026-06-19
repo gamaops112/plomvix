@@ -1,5 +1,4 @@
 package planner
-package planner
 
 import (
 	"context"
@@ -55,5 +54,5 @@ func (n *LimitNode) Next(ctx context.Context) (engine.Row, error) {
 	}
 }
 
-func (n *LimitNode) Close() error  { return n.child.Close() }
+func (n *LimitNode) Close() error          { return n.child.Close() }
 func (n *LimitNode) Schema() engine.Schema { return n.outSchema.DeepCopy() }
