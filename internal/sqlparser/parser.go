@@ -1,7 +1,10 @@
 // Package sqlparser provides the Global SQL Parser for Plomvix. It wraps the
 // Vitess SQL parser to convert raw SQL text into a strongly-typed AST with
-// engine-agnostic metadata (statement type, target tables) for downstream
-// routing and planning.
+// engine-agnostic metadata for downstream routing and planning.
+//
+// Enterprise tier adds: ParseError with byte offsets, non-mutating normalization,
+// SHA-256 fingerprinting, quote-aware sanitization with lexical fallback,
+// multi-error recovery (ParseScript), and lightweight semantic pre-validation.
 //
 // Dialect: Vitess v0.24+ parses MySQL-compatible SQL.
 package sqlparser
@@ -31,31 +34,44 @@ type Statement interface {
 	TargetTables() []string
 	RawAST() any
 	String() string
+
+	// Enterprise methods.
+	Normalize() string
+	Fingerprint() string
+	Sanitize() string
+	StripComments() string
 }
 
-// SyntaxError represents a fail-fast parsing error with location tracking.
-type SyntaxError struct {
+// ParseError supersedes the Basic tier's SyntaxError with byte offset support.
+type ParseError struct {
 	Message string
-	Line    int
-	Column  int
+	Line    int    // 1-based
+	Column  int    // 1-based, rune count
+	Offset  int    // byte offset; -1 if unknown
+	Kind    string // "syntax" or "semantic"
+	Cause   error
 }
 
-func (e *SyntaxError) Error() string {
-	return fmt.Sprintf("syntax error at line %d:%d: %s", e.Line, e.Column, e.Message)
+func (e *ParseError) Error() string {
+	return fmt.Sprintf("line %d, column %d (%s): %s", e.Line, e.Column, e.Kind, e.Message)
 }
+
+func (e *ParseError) Unwrap() error { return e.Cause }
 
 // Sentinel errors.
 var (
-	ErrEmptySQL = errors.New("sqlparser: empty SQL statement")
+	ErrEmptySQL           = errors.New("sqlparser: empty SQL statement")
+	ErrSemanticValidation = errors.New("sqlparser: semantic validation failed")
 )
 
 // Parser is the global SQL parsing service.
 type Parser interface {
 	Parse(sql string) (Statement, error)
 	ParseMulti(sql string) ([]Statement, error)
+	ParseScript(sql string) ([]Statement, []*ParseError)
 }
 
-// vitessParser implements Parser using Vitess functions.
+// vitessParser implements Parser using Vitess.
 type vitessParser struct {
 	p *vitess.Parser
 }
@@ -69,11 +85,4 @@ func New() (Parser, error) {
 	return &vitessParser{p: p}, nil
 }
 
-// stmtWrapper wraps a Vitess AST node.
-type stmtWrapper struct {
-	ast vitess.Statement
-	sql string
-}
-
 var _ Parser = (*vitessParser)(nil)
-var _ Statement = (*stmtWrapper)(nil)
