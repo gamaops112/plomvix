@@ -20,7 +20,7 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 | **4. The Write Path**<br>*(Immediate Next)* | 27 | **DDL Execution** (`CREATE` / `DROP`) | `internal/engine/sql/exec` | ✅ **Done** | Unblocks schema creation. Writes to Catalog. |
 | | 28 | **DML Execution** (`INSERT` / `UPDATE` / `DELETE`) | `internal/engine/sql/exec` | ✅ **Ready for Coding** | Unblocks data insertion. Uses MVCC timestamps. |
 | **5. Advanced Execution** | 29 | Joins & Multi-Table Execution | `.../planner`, `.../exec` | ✅ **Ready for Coding** | Nested Loop & Hash Joins. |
-| | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Ready for Coding** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
+| | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Done** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
 | **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | 🔮 **Future** | Postgres Simple Query or Custom TCP. |
 
 ***
@@ -37,4 +37,4 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 ***
 
 ### 🎯 Immediate Action Items
-1. **Execute Plans 28, 29, & 30 (DML, Joins, & Sorting/Aggregation Execution):** Hand the approved DML, Joins, and Sorting/Aggregation execution plans to the coding agent.
+1. **Execute Plans 28 & 29 (DML & Joins Execution):** Hand the approved DML and Joins execution plans to the coding agent.

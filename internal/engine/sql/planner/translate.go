@@ -2,6 +2,8 @@ package planner
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/engine"
@@ -112,19 +114,128 @@ func Translate(
 		}
 	}
 
-	// Bind projections.
-	if sel.SelectExprs != nil {
+	// Handle GROUP BY and aggregates.
+	if sel.GroupBy != nil && len(sel.GroupBy.Exprs) > 0 || hasAggregates(sel.SelectExprs) {
+		op, err = translateGroupBy(ctx, op, sel, &engSchema)
+		if err != nil {
+			return nil, err
+		}
+	} else if sel.SelectExprs != nil {
+		// Bind projections without aggregation.
 		ps := GetPlannerSchema(op)
 		projs, outSchema, bindErr := BindProjectionPlanner(sel.SelectExprs, ps)
 		if bindErr != nil {
 			return nil, bindErr
 		}
 		op = NewProjectNode(op, projs, outSchema.ToEngineSchema())
-	} else {
-		_ = engSchema
+	}
+
+	// Handle ORDER BY.
+	if len(sel.OrderBy) > 0 {
+		op, err = translateOrderBy(op, sel.OrderBy)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Handle LIMIT.
+	if sel.Limit != nil {
+		op = translateLimit(op, sel.Limit)
 	}
 
 	return op, nil
+}
+
+// translateOrderBy parses ORDER BY and wraps the operator in a SortNode.
+func translateOrderBy(op Operator, orders vitess.OrderBy) (Operator, error) {
+	schema := op.Schema()
+	var keys []SortKey
+	for _, o := range orders {
+		cn, ok := o.Expr.(*vitess.ColName)
+		if !ok {
+			return nil, ErrUnsupportedFeature
+		}
+		idx := colIndex(cn.Name.String(), schema)
+		if idx < 0 {
+			return nil, fmt.Errorf("planner: ORDER BY column %q not found", cn.Name.String())
+		}
+		keys = append(keys, SortKey{ColIdx: idx, Desc: o.Direction == vitess.DescOrder})
+	}
+	return NewSortNode(op, keys), nil
+}
+
+// translateGroupBy handles GROUP BY and aggregate functions.
+func translateGroupBy(ctx context.Context, op Operator, sel *vitess.Select, engSchema *engine.Schema) (Operator, error) {
+	schema := op.Schema()
+	var groupKeys []int
+	if sel.GroupBy != nil {
+		for _, gb := range sel.GroupBy.Exprs {
+			cn, ok := gb.(*vitess.ColName)
+			if !ok {
+				return nil, ErrUnsupportedFeature
+			}
+			idx := colIndex(cn.Name.String(), schema)
+			if idx < 0 {
+				return nil, fmt.Errorf("planner: GROUP BY column %q not found", cn.Name.String())
+			}
+			groupKeys = append(groupKeys, idx)
+		}
+	}
+
+	// Resolve aggregates from SelectExprs.
+	var aggs []AggRequest
+	for _, expr := range sel.SelectExprs.Exprs {
+		ae, ok := expr.(*vitess.AliasedExpr)
+		if !ok {
+			return nil, ErrUnsupportedFeature
+		}
+		if isAggregateExpr(ae.Expr) {
+			agg, err := resolveAggregate(ae, schema)
+			if err != nil {
+				return nil, err
+			}
+			aggs = append(aggs, agg)
+		}
+	}
+	_ = engSchema
+	return NewHashAggNode(op, groupKeys, aggs), nil
+}
+
+// hasAggregates checks if any select expression is an aggregate function.
+func hasAggregates(exprs *vitess.SelectExprs) bool {
+	if exprs == nil {
+		return false
+	}
+	for _, expr := range exprs.Exprs {
+		if ae, ok := expr.(*vitess.AliasedExpr); ok && isAggregateExpr(ae.Expr) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAggregateExpr(expr vitess.Expr) bool {
+	if fc, ok := expr.(*vitess.FuncExpr); ok {
+		name := strings.ToUpper(fc.Name.String())
+		return name == "COUNT" || name == "SUM" || name == "MIN" || name == "MAX"
+	}
+	return false
+}
+
+// translateLimit wraps the operator in a LimitNode.
+func translateLimit(op Operator, limit *vitess.Limit) Operator {
+	var rowCount, offset int64
+	if limit.Rowcount != nil {
+		if lit, ok := limit.Rowcount.(*vitess.Literal); ok {
+			fmt.Sscanf(lit.Val, "%d", &rowCount)
+		}
+	}
+	if limit.Offset != nil {
+		if lit, ok := limit.Offset.(*vitess.Literal); ok {
+			fmt.Sscanf(lit.Val, "%d", &offset)
+		}
+	}
+	return NewLimitNode(op, rowCount, offset)
 }
 
 // translateFrom recursively translates a Vitess TableExpr into a Volcano operator.
