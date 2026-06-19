@@ -13,6 +13,8 @@
 2. **Fail-Fast Initialization:** If any component configuration validation or startup handshake fails (e.g., binding to TCP port, opening database file, initializing WAL), the daemon must abort immediately with a non-zero exit code.
 3. **Stale Backend Config Elimination:** The configuration schema must remove old references to `bbolt` and `pebble` storage engines, replacing them with parameters for the custom Pager, WAL, and MVCC storage system.
 4. **Fallback Default Configurations:** Missing config file entries must default to safe in-memory configurations or standard developer paths (e.g. `data/plomvix.db`, localhost PG port `5432`).
+5. **In-Memory KVStore Fallback:** The on-disk KVStore built atop the Pager is assumed to be implemented in a preceding/following plan. If unavailable, this wiring plan will temporarily inject the in-memory `kv_store` to allow the daemon to boot.
+6. **Interface Stubs/Mocks:** This plan assumes the existence of the Catalog, Transaction, Vacuum, and Router/Parser packages. If these packages are not yet fully implemented or integrated, the coding agent must create minimal stub/mock/fake implementations satisfying the interfaces required by `sql.NewSQLEngine` and other components to allow the daemon to boot.
 
 ---
 
@@ -109,9 +111,7 @@ func New(opts Options) (*Runtime, error) {
 	if err := os.MkdirAll(filepath.Dir(cfg.Store.DBPath), 0755); err != nil {
 		return nil, fmt.Errorf("runtime: create data dir: %w", err)
 	}
-	sharedPager := pager.NewWithOptions(cfg.Store.DBPath, pager.Options{
-		WALPath: cfg.Store.WALPath,
-	})
+	sharedPager := pager.New(cfg.Store.DBPath)
 	sharedKV := kv.New(sharedPager)
 
 	// 4. Initialize HeapManager (TableRegistry), TxManager, Vacuum, and RowDecoder
@@ -160,11 +160,21 @@ func New(opts Options) (*Runtime, error) {
 
 	// 8. Register components with lifecycle manager in LIFO start/stop order
 	manager := lifecycle.NewManager()
-	manager.Register("storage.pager", sharedPager.Open, sharedPager.Close)
-	manager.Register("storage.kv", sharedKV.Open, sharedKV.Close)
-	manager.Register("catalog", cat.Start, cat.Stop)
-	manager.Register("vacuum", vacMgr.Start, vacMgr.Stop)
-	manager.Register("network.pg_server", pgServer.Start, pgServer.Stop)
+	if err := manager.Register(&pagerComponent{p: sharedPager}); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(&kvComponent{store: sharedKV}); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(cat); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(vacMgr); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(pgServer); err != nil {
+		return nil, err
+	}
 
 	return &Runtime{
 		opts:    resolved,
@@ -173,6 +183,23 @@ func New(opts Options) (*Runtime, error) {
 		manager: manager,
 	}, nil
 }
+
+// pagerComponent wraps pager.Pager to implement lifecycle.Component
+type pagerComponent struct {
+	p pager.Pager
+}
+func (c *pagerComponent) Name() string { return "storage.pager" }
+func (c *pagerComponent) Start(ctx context.Context) error { return c.p.Open(ctx) }
+func (c *pagerComponent) Stop(ctx context.Context) error { return c.p.Close(ctx) }
+
+// kvComponent wraps kv.KVStore to implement lifecycle.Component
+type kvComponent struct {
+	store kv.KVStore
+}
+func (c *kvComponent) Name() string { return "storage.kv" }
+func (c *kvComponent) Start(ctx context.Context) error { return c.store.Open(ctx) }
+func (c *kvComponent) Stop(ctx context.Context) error { return c.store.Close(ctx) }
+
 ```
 
 ### 3. Graceful Shutdown Ordering (LIFO Execution)

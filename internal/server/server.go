@@ -4,10 +4,12 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 
@@ -15,12 +17,24 @@ import (
 	"github.com/plomvix/plomvix/internal/sqlparser"
 )
 
+// ServerConfig holds all configuration for the PG wire protocol server.
+type ServerConfig struct {
+	Addr           string
+	Router         Router
+	Parser         sqlparser.Parser
+	Logger         *slog.Logger
+	SSL            SSLConfig
+	MaxConnections int64 // 0 = unlimited
+}
+
 // Server is a PG Wire Protocol network server.
 type Server struct {
-	addr   string
-	ln     net.Listener
-	router Router
-	parser sqlparser.Parser
+	cfg     ServerConfig
+	ln      net.Listener
+	router  Router
+	parser  sqlparser.Parser
+	log     *slog.Logger
+	throttle *Throttle
 
 	mu     sync.Mutex
 	active sync.WaitGroup
@@ -32,11 +46,13 @@ type Router interface {
 }
 
 // New creates a new PG wire protocol server.
-func New(addr string, router Router, parser sqlparser.Parser) *Server {
+func New(cfg ServerConfig) *Server {
 	return &Server{
-		addr:   addr,
-		router: router,
-		parser: parser,
+		cfg:      cfg,
+		router:   cfg.Router,
+		parser:   cfg.Parser,
+		log:      cfg.Logger,
+		throttle: NewThrottle(cfg.MaxConnections),
 	}
 }
 
@@ -53,11 +69,15 @@ func (s *Server) Addr() net.Addr {
 
 // Start begins listening on the configured address.
 func (s *Server) Start(ctx context.Context) error {
-	ln, err := net.Listen("tcp", s.addr)
+	ln, err := net.Listen("tcp", s.cfg.Addr)
 	if err != nil {
-		return fmt.Errorf("server: listen %s: %w", s.addr, err)
+		return fmt.Errorf("server: listen %s: %w", s.cfg.Addr, err)
 	}
 	s.ln = ln
+
+	if s.log != nil {
+		s.log.Info("pg-wire-server: listening", "addr", s.cfg.Addr)
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -74,6 +94,9 @@ func (s *Server) Stop(ctx context.Context) error {
 		_ = s.ln.Close()
 	}
 	s.active.Wait()
+	if s.log != nil {
+		s.log.Info("pg-wire-server: stopped")
+	}
 	return nil
 }
 
@@ -88,9 +111,19 @@ func (s *Server) acceptLoop(ctx context.Context) {
 				continue
 			}
 		}
+		if !s.throttle.TryAcquire() {
+			// Reject: too many connections.
+			go func(c net.Conn) {
+				w := newPGWriter(c)
+				w.WriteErrorResponse("FATAL", "53300", "too many connections")
+				c.Close()
+			}(conn)
+			continue
+		}
 		s.active.Add(1)
 		go func() {
 			defer s.active.Done()
+			defer s.throttle.Release()
 			s.handleConn(ctx, conn)
 		}()
 	}
@@ -99,20 +132,28 @@ func (s *Server) acceptLoop(ctx context.Context) {
 func (s *Server) handleConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	session := &Session{
-		conn:   conn,
-		writer: newPGWriter(conn),
-		router: s.router,
-		parser: s.parser,
+		conn:      conn,
+		writer:    newPGWriter(conn),
+		router:    s.router,
+		parser:    s.parser,
+		cache:     newSessionCache(),
+		sslConfig: s.cfg.SSL,
+		log:       s.log,
 	}
-	_ = session.Run(ctx)
+	if err := session.Run(ctx); err != nil && s.log != nil {
+		s.log.Warn("pg-wire-server: session error", "error", err)
+	}
 }
 
 // Session represents a single client connection.
 type Session struct {
-	conn   net.Conn
-	writer *pgWriter
-	router Router
-	parser sqlparser.Parser
+	conn      net.Conn
+	writer    *pgWriter
+	router    Router
+	parser    sqlparser.Parser
+	cache     *sessionCache
+	sslConfig SSLConfig
+	log       *slog.Logger
 }
 
 // Run processes the client connection lifecycle.
@@ -149,6 +190,10 @@ func (s *Session) Run(ctx context.Context) error {
 			if err := s.handleQuery(ctx, payload); err != nil {
 				s.writeError("ERROR", "42601", err.Error())
 			}
+		case MsgParse, MsgBind, MsgExecute, MsgDescribeStmt, MsgSync, MsgCloseStmt:
+			if err := s.handleExtendedMessage(ctx, mType, payload); err != nil {
+				s.writeError("ERROR", "42601", err.Error())
+			}
 		default:
 			s.writeError("ERROR", "0A000", "unsupported protocol message type")
 		}
@@ -157,7 +202,6 @@ func (s *Session) Run(ctx context.Context) error {
 
 // handleStartup processes the PG startup handshake.
 func (s *Session) handleStartup() error {
-	// Read 4-byte length + payload (no type byte for startup).
 	lenBuf := make([]byte, 4)
 	if _, err := io.ReadFull(s.conn, lenBuf); err != nil {
 		return fmt.Errorf("server: startup read: %w", err)
@@ -171,16 +215,32 @@ func (s *Session) handleStartup() error {
 		return fmt.Errorf("server: startup payload: %w", err)
 	}
 
-	// SSLRequest: 8 bytes total (4 len + 4 magic 80877103)
+	// SSLRequest.
 	if len(payload) >= 4 && binary.BigEndian.Uint32(payload[:4]) == 80877103 {
-		// Respond 'N' and retry handshake.
-		if err := s.writer.WriteByte(MsgSSLRequestN); err != nil {
-			return err
+		tlsCfg, err := s.sslConfig.tlsConfig()
+		if err == nil && tlsCfg != nil {
+			// SSL available: respond 'S', upgrade.
+			if _, err := s.conn.Write([]byte{'S'}); err != nil {
+				return err
+			}
+			tlsConn := tls.Server(s.conn, tlsCfg)
+			if err := tlsConn.Handshake(); err != nil {
+				return fmt.Errorf("server: TLS handshake: %w", err)
+			}
+			s.conn = tlsConn
+			s.writer = newPGWriter(s.conn)
+			if s.log != nil {
+				s.log.Info("pg-wire-server: TLS established")
+			}
+		} else {
+			// SSL not available: respond 'N', continue unencrypted.
+			if err := s.writer.WriteByte(MsgSSLRequestN); err != nil {
+				return err
+			}
 		}
 		return s.handleStartup()
 	}
 
-	// StartupMessage: protocol version 3.0 = 196608
 	if len(payload) < 4 {
 		return errors.New("server: invalid startup message")
 	}
@@ -189,12 +249,46 @@ func (s *Session) handleStartup() error {
 		return fmt.Errorf("server: unsupported protocol version %d", protoVer)
 	}
 
-	// Send AuthOK (trust, no password).
+	// Extract username from startup parameters (key=value pairs).
+	var username string
+	pairs := payload[4:] // skip version
+	for i := 0; i+1 < len(pairs); {
+		end := -1
+		for j := i; j < len(pairs); j++ {
+			if pairs[j] == 0 {
+				end = j
+				break
+			}
+		}
+		if end < 0 {
+			break
+		}
+		key := string(pairs[i:end])
+		i = end + 1
+		end2 := -1
+		for j := i; j < len(pairs); j++ {
+			if pairs[j] == 0 {
+				end2 = j
+				break
+			}
+		}
+		if end2 < 0 {
+			break
+		}
+		value := string(pairs[i:end2])
+		i = end2 + 1
+		if key == "user" {
+			username = value
+		}
+	}
+	_ = username
+
+	// SASL SCRAM-SHA-256 if requested via startup parameter.
+	// For now, fall through to trust authentication.
 	if err := s.writer.WriteAuthOK(); err != nil {
 		return err
 	}
 
-	// ParameterStatus packets.
 	for _, p := range []struct{ k, v string }{
 		{"server_version", "15.0.0"},
 		{"client_encoding", "UTF8"},
@@ -205,13 +299,9 @@ func (s *Session) handleStartup() error {
 			return err
 		}
 	}
-
-	// BackendKeyData.
 	if err := s.writer.WriteBackendKeyData(42, 99); err != nil {
 		return err
 	}
-
-	// ReadyForQuery.
 	return s.writer.WriteReadyForQuery('I')
 }
 
@@ -221,7 +311,11 @@ func (s *Session) handleQuery(ctx context.Context, payload []byte) error {
 	if sql == "" {
 		return s.writer.WriteReadyForQuery('I')
 	}
+	return s.executeSQL(ctx, sql)
+}
 
+// executeSQL parses and executes a SQL string, streaming results.
+func (s *Session) executeSQL(ctx context.Context, sql string) error {
 	// Check catalog mock queries first.
 	if isCatalogQuery(sql) {
 		schema, rows, tag, ok := executeMockCatalog(sql)
@@ -241,13 +335,12 @@ func (s *Session) handleQuery(ctx context.Context, payload []byte) error {
 		}
 	}
 
-	// Parse and execute through the router.
 	stmt, err := s.parser.Parse(sql)
 	if err != nil {
 		return s.writeError("ERROR", "42601", err.Error())
 	}
 
-	result, err := s.router.Route(ctx, 0, stmt) // userID 0 = trust
+	result, err := s.router.Route(ctx, 0, stmt)
 	if err != nil {
 		return s.writeError("ERROR", "42000", err.Error())
 	}

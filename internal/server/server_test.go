@@ -29,7 +29,7 @@ func TestServer_StartStop(t *testing.T) {
 			return &engine.Result{}, nil
 		},
 	}
-	srv := New("127.0.0.1:0", router, p)
+	srv := New(ServerConfig{Addr: "127.0.0.1:0", Router: router, Parser: p})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -57,7 +57,7 @@ func TestServer_ClientConnect(t *testing.T) {
 		},
 	}
 
-	srv := New("127.0.0.1:0", router, p)
+	srv := New(ServerConfig{Addr: "127.0.0.1:0", Router: router, Parser: p})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
