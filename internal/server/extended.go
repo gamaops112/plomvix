@@ -186,7 +186,7 @@ func (s *Session) handleExecute(ctx context.Context, payload []byte) error {
 }
 
 // handleDescribe processes a Describe ('D') message.
-func (s *Session) handleDescribe(payload []byte) error {
+func (s *Session) handleDescribe(_ []byte) error {
 	// Respond with NoData indicator.
 	return s.writer.WritePacket('n', nil)
 }

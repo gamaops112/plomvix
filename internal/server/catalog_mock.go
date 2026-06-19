@@ -20,13 +20,6 @@ func isCatalogQuery(sql string) bool {
 		strings.Contains(lower, "pg_settings")
 }
 
-// mockCatalogResult holds a mock response for a catalog query.
-type mockCatalogResult struct {
-	Schema engine.Schema
-	Rows   []engine.Row
-	Tag    string // command tag, e.g. "SELECT 1"
-}
-
 // executeMockCatalog returns static mock results for common PG system queries.
 func executeMockCatalog(sql string) (engine.Schema, []engine.Row, string, bool) {
 	lower := strings.ToLower(sql)
