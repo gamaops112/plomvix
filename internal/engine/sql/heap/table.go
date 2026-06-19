@@ -222,13 +222,6 @@ func extractPKPrefix(fullKey []byte) []byte {
 	return fullKey[:len(fullKey)-8]
 }
 
-func isTombstoneValue(data []byte) (bool, error) {
-	if len(data) < 1 {
-		return false, fmt.Errorf("heap: value too short")
-	}
-	return data[0] == FlagTombstone, nil
-}
-
 // --- Vacuum ---
 
 func (t *table) Vacuum(ctx context.Context, olderThan uint64) error {
