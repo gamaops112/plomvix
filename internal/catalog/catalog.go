@@ -1,10 +1,10 @@
 // Package catalog provides the Global System Catalog, the server-level control
-// plane for Plomvix. It manages system metadata, registers pluggable engines,
-// provides schema resolution, and handles basic authentication.
+// plane for Plomvix. It manages system metadata, RBAC, schema versioning,
+// audit logging, and bcrypt-based authentication.
 //
-// The Catalog persists its own system tables via the Enterprise Table Heap
-// using a strict Meta-First TxID persistence strategy with safe multi-phase
-// locking and Stop() draining.
+// Enterprise tier additions: RBAC roles/grants, bcrypt passwords with legacy
+// SHA256 migration, immutable audit log, schema history tracking, and
+// immediate in-memory TxID reservation.
 package catalog
 
 import (
@@ -18,15 +18,30 @@ import (
 
 	"github.com/plomvix/plomvix/internal/engine/sql/heap"
 	"github.com/plomvix/plomvix/internal/engine/sql/key"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // System table IDs.
 const (
-	SystemTableTablesID uint64 = 1
-	SystemTableUsersID  uint64 = 2
-	SystemTableMetaID   uint64 = 3
+	SystemTableTablesID        uint64 = 1
+	SystemTableUsersID         uint64 = 2
+	SystemTableMetaID          uint64 = 3
+	SystemTableRolesID         uint64 = 4
+	SystemTableGrantsID        uint64 = 5
+	SystemTableUserRolesID     uint64 = 6
+	SystemTableSchemaHistoryID uint64 = 7
+	SystemTableAuditLogID      uint64 = 8
 
 	MetaKeyNextTxID = "catalog_next_tx_id"
+)
+
+// Action represents an RBAC action type.
+type Action string
+
+const (
+	ActionRead  Action = "READ"
+	ActionWrite Action = "WRITE"
+	ActionDDL   Action = "DDL"
 )
 
 // System table schemas.
@@ -38,6 +53,7 @@ var (
 			{Name: "engine_name", Kind: key.KindString},
 			{Name: "table_name", Kind: key.KindString},
 			{Name: "schema_payload", Kind: key.KindBytes},
+			{Name: "schema_version", Kind: key.KindUint64},
 		},
 		PKIndices: []int{0},
 	}
@@ -61,6 +77,63 @@ var (
 		},
 		PKIndices: []int{0},
 	}
+
+	schemaRoles = heap.Schema{
+		TableID: SystemTableRolesID,
+		Columns: []heap.Column{
+			{Name: "role_id", Kind: key.KindUint64},
+			{Name: "role_name", Kind: key.KindString},
+		},
+		PKIndices: []int{0},
+	}
+
+	schemaGrants = heap.Schema{
+		TableID: SystemTableGrantsID,
+		Columns: []heap.Column{
+			{Name: "grant_id", Kind: key.KindUint64},
+			{Name: "role_id", Kind: key.KindUint64},
+			{Name: "table_id", Kind: key.KindUint64},
+			{Name: "action", Kind: key.KindString},
+		},
+		PKIndices: []int{0},
+	}
+
+	schemaUserRoles = heap.Schema{
+		TableID: SystemTableUserRolesID,
+		Columns: []heap.Column{
+			{Name: "user_role_id", Kind: key.KindUint64},
+			{Name: "user_id", Kind: key.KindUint64},
+			{Name: "role_id", Kind: key.KindUint64},
+		},
+		PKIndices: []int{0},
+	}
+
+	schemaSchemaHistory = heap.Schema{
+		TableID: SystemTableSchemaHistoryID,
+		Columns: []heap.Column{
+			{Name: "history_id", Kind: key.KindUint64},
+			{Name: "table_id", Kind: key.KindUint64},
+			{Name: "version", Kind: key.KindUint64},
+			{Name: "action", Kind: key.KindString},
+			{Name: "schema_payload", Kind: key.KindBytes},
+			{Name: "timestamp", Kind: key.KindUint64},
+		},
+		PKIndices: []int{0},
+	}
+
+	schemaAuditLog = heap.Schema{
+		TableID: SystemTableAuditLogID,
+		Columns: []heap.Column{
+			{Name: "audit_id", Kind: key.KindUint64},
+			{Name: "tx_id", Kind: key.KindUint64},
+			{Name: "user_id", Kind: key.KindUint64},
+			{Name: "action", Kind: key.KindString},
+			{Name: "target_type", Kind: key.KindString},
+			{Name: "target_name", Kind: key.KindString},
+			{Name: "timestamp", Kind: key.KindUint64},
+		},
+		PKIndices: []int{0},
+	}
 )
 
 // Engine is a pluggable backend engine registered with the catalog.
@@ -75,6 +148,7 @@ type TableInfo struct {
 	EngineName    string
 	TableName     string
 	SchemaPayload []byte
+	SchemaVersion uint64
 }
 
 // UserInfo holds catalog metadata for a single user.
@@ -83,6 +157,30 @@ type UserInfo struct {
 	Username     string
 	PasswordHash []byte
 	IsAdmin      bool
+}
+
+// RoleInfo holds RBAC role metadata.
+type RoleInfo struct {
+	RoleID   uint64
+	RoleName string
+}
+
+// GrantInfo holds a single RBAC grant.
+type GrantInfo struct {
+	GrantID uint64
+	RoleID  uint64
+	TableID uint64
+	Action  Action
+}
+
+// SchemaHistoryEntry records a schema change event.
+type SchemaHistoryEntry struct {
+	HistoryID     uint64
+	TableID       uint64
+	Version       uint64
+	Action        string
+	SchemaPayload []byte
+	Timestamp     uint64
 }
 
 // Catalog is the global system catalog interface.
@@ -95,6 +193,18 @@ type Catalog interface {
 	GetTable(ctx context.Context, tableName string) (TableInfo, error)
 	CreateUser(ctx context.Context, username, password string, isAdmin bool) error
 	Authenticate(ctx context.Context, username, password string) (UserInfo, error)
+
+	// Enterprise RBAC.
+	CreateRole(ctx context.Context, roleName string) error
+	DropRole(ctx context.Context, roleName string) error
+	AssignRole(ctx context.Context, username, roleName string) error
+	RevokeRole(ctx context.Context, username, roleName string) error
+	Grant(ctx context.Context, roleName, tableName string, action Action) error
+	Revoke(ctx context.Context, roleName, tableName string, action Action) error
+	CheckPermission(ctx context.Context, userID, tableID uint64, action Action) (bool, error)
+
+	// Enterprise schema history.
+	GetSchemaHistory(ctx context.Context, tableName string) ([]SchemaHistoryEntry, error)
 }
 
 // Sentinel errors.
@@ -111,6 +221,13 @@ var (
 	ErrCatalogAlreadyStarted = errors.New("catalog: already started or starting")
 	ErrEmptyName             = errors.New("catalog: name cannot be empty")
 	ErrConflict              = errors.New("catalog: concurrent operation conflict")
+	ErrRoleNotFound          = errors.New("catalog: role not found")
+	ErrDuplicateRole         = errors.New("catalog: role name already exists")
+	ErrPermissionDenied      = errors.New("catalog: permission denied")
+	ErrInvalidAction         = errors.New("catalog: invalid RBAC action")
+	ErrDuplicateRoleAssignment = errors.New("catalog: user already has this role")
+	ErrDuplicateGrant        = errors.New("catalog: grant already exists")
+	ErrGrantNotFound         = errors.New("catalog: grant not found")
 )
 
 // catalog is the concrete implementation.
@@ -125,9 +242,14 @@ type catalog struct {
 
 	nextTxID uint64
 
-	tablesHandle heap.Table
-	usersHandle  heap.Table
-	metaHandle   heap.Table
+	tablesHandle  heap.Table
+	usersHandle   heap.Table
+	metaHandle    heap.Table
+	rolesHandle   heap.Table
+	grantsHandle  heap.Table
+	userRolesHandle heap.Table
+	historyHandle heap.Table
+	auditHandle   heap.Table
 }
 
 // New creates a new Catalog backed by the given Heap.
@@ -136,6 +258,13 @@ func New(h *heap.Heap) Catalog {
 		h:       h,
 		engines: make(map[string]Engine),
 	}
+}
+
+// reserveTx increments nextTxID immediately under lock and returns the new value.
+// Must be called while holding c.mu (Write Lock).
+func (c *catalog) reserveTx() uint64 {
+	c.nextTxID++
+	return c.nextTxID
 }
 
 // RegisterEngine registers a pluggable engine. Must be called before Start().
@@ -155,7 +284,12 @@ func (c *catalog) RegisterEngine(e Engine) error {
 	return nil
 }
 
-// genPasswordHash generates a salted SHA-256 hash for a password.
+// isValidAction checks if an Action string is one of the valid RBAC actions.
+func isValidAction(a Action) bool {
+	return a == ActionRead || a == ActionWrite || a == ActionDDL
+}
+
+// genPasswordHash generates a salted SHA-256 hash (legacy format).
 func genPasswordHash(password string) ([]byte, error) {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
@@ -168,19 +302,38 @@ func genPasswordHash(password string) ([]byte, error) {
 	return append(salt, digest...), nil
 }
 
+// genBcryptHash generates a bcrypt hash with cost 10.
+func genBcryptHash(password string) ([]byte, error) {
+	return bcrypt.GenerateFromPassword([]byte(password), 10)
+}
+
+// isLegacyHash returns true if the hash is a legacy SHA256 (not bcrypt).
+// bcrypt hashes start with "$2a$".
+func isLegacyHash(hash []byte) bool {
+	return len(hash) < 4 || string(hash[:4]) != "$2a$"
+}
+
 // verifyPassword compares a plaintext password against a stored hash.
+// Supports bcrypt and legacy SHA256.
 func verifyPassword(hash []byte, password string) bool {
-	if len(hash) < 16 {
+	if len(hash) == 0 {
 		return false
 	}
-	salt := hash[:16]
-	expected := hash[16:]
-	h := sha256.New()
-	h.Write(salt)
-	h.Write([]byte(password))
-	actual := h.Sum(nil)
-	return subtle.ConstantTimeCompare(expected, actual) == 1
+	if isLegacyHash(hash) {
+		if len(hash) < 16 {
+			return false
+		}
+		salt := hash[:16]
+		expected := hash[16:]
+		h := sha256.New()
+		h.Write(salt)
+		h.Write([]byte(password))
+		actual := h.Sum(nil)
+		return subtle.ConstantTimeCompare(expected, actual) == 1
+	}
+	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
 }
 
 // compile-time check
 var _ Catalog = (*catalog)(nil)
+

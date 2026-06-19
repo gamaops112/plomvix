@@ -11,31 +11,44 @@ import (
 // bootstrap initializes the system tables and meta on a fresh Heap.
 // Must be called without holding mu.
 func (c *catalog) bootstrap(ctx context.Context) error {
-	// Open system table handles.
-	tbl, err := c.h.OpenTable(schemaTables)
+	var err error
+
+	c.tablesHandle, err = c.h.OpenTable(schemaTables)
 	if err != nil {
 		return fmt.Errorf("catalog: open _plomvix_tables: %w", err)
 	}
-	c.tablesHandle = tbl
-
-	usr, err := c.h.OpenTable(schemaUsers)
+	c.usersHandle, err = c.h.OpenTable(schemaUsers)
 	if err != nil {
 		return fmt.Errorf("catalog: open _plomvix_users: %w", err)
 	}
-	c.usersHandle = usr
-
-	meta, err := c.h.OpenTable(schemaMeta)
+	c.metaHandle, err = c.h.OpenTable(schemaMeta)
 	if err != nil {
 		return fmt.Errorf("catalog: open _plomvix_meta: %w", err)
 	}
-	c.metaHandle = meta
+	c.rolesHandle, err = c.h.OpenTable(schemaRoles)
+	if err != nil {
+		return fmt.Errorf("catalog: open _plomvix_roles: %w", err)
+	}
+	c.grantsHandle, err = c.h.OpenTable(schemaGrants)
+	if err != nil {
+		return fmt.Errorf("catalog: open _plomvix_grants: %w", err)
+	}
+	c.userRolesHandle, err = c.h.OpenTable(schemaUserRoles)
+	if err != nil {
+		return fmt.Errorf("catalog: open _plomvix_user_roles: %w", err)
+	}
+	c.historyHandle, err = c.h.OpenTable(schemaSchemaHistory)
+	if err != nil {
+		return fmt.Errorf("catalog: open _plomvix_schema_history: %w", err)
+	}
+	c.auditHandle, err = c.h.OpenTable(schemaAuditLog)
+	if err != nil {
+		return fmt.Errorf("catalog: open _plomvix_audit_log: %w", err)
+	}
 
-	// Check if meta has the nextTxID key.
 	maxTx := heap.Tx{ID: math.MaxUint64}
 	_, err = c.metaHandle.Get(ctx, maxTx, []any{MetaKeyNextTxID})
 	if err == heap.ErrKeyNotFound {
-		// Bootstrap: insert nextTxID = 1 using Tx{1}.
-		// Value is 1, not 0, to prevent first catalog write from reusing txID=1.
 		err = c.metaHandle.Insert(ctx, heap.Tx{ID: 1}, []any{MetaKeyNextTxID, uint64(1)})
 		if err != nil {
 			return fmt.Errorf("catalog: bootstrap meta: %w", err)
