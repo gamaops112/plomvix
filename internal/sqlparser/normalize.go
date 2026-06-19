@@ -57,32 +57,57 @@ func stripCommentsLex(sql string) string {
 	for i < len(sql) {
 		if i+1 < len(sql) && sql[i] == '-' && sql[i+1] == '-' {
 			i += 2
-			for i < len(sql) && sql[i] != '\n' { i++ }
-			if i < len(sql) { i++ }
+			for i < len(sql) && sql[i] != '\n' {
+				i++
+			}
+			if i < len(sql) {
+				i++
+			}
 			continue
 		}
 		if i+1 < len(sql) && sql[i] == '/' && sql[i+1] == '*' {
 			i += 2
-			for i+1 < len(sql) && !(sql[i] == '*' && sql[i+1] == '/') { i++ }
-			if i+1 < len(sql) { i += 2 }
+			for i+1 < len(sql) && !(sql[i] == '*' && sql[i+1] == '/') {
+				i++
+			}
+			if i+1 < len(sql) {
+				i += 2
+			}
 			continue
 		}
 		if sql[i] == '#' {
 			i++
-			for i < len(sql) && sql[i] != '\n' { i++ }
-			if i < len(sql) { i++ }
-			continue
-		}
-		if sql[i] == '\'' || sql[i] == '"' || sql[i] == '`' {
-			quote := sql[i]; out.WriteByte(quote); i++
-			for i < len(sql) {
-				if sql[i] == '\\' && i+1 < len(sql) { out.WriteByte(sql[i]); out.WriteByte(sql[i+1]); i += 2; continue }
-				if sql[i] == quote { out.WriteByte(quote); i++; break }
-				out.WriteByte(sql[i]); i++
+			for i < len(sql) && sql[i] != '\n' {
+				i++
+			}
+			if i < len(sql) {
+				i++
 			}
 			continue
 		}
-		out.WriteByte(sql[i]); i++
+		if sql[i] == '\'' || sql[i] == '"' || sql[i] == '`' {
+			quote := sql[i]
+			out.WriteByte(quote)
+			i++
+			for i < len(sql) {
+				if sql[i] == '\\' && i+1 < len(sql) {
+					out.WriteByte(sql[i])
+					out.WriteByte(sql[i+1])
+					i += 2
+					continue
+				}
+				if sql[i] == quote {
+					out.WriteByte(quote)
+					i++
+					break
+				}
+				out.WriteByte(sql[i])
+				i++
+			}
+			continue
+		}
+		out.WriteByte(sql[i])
+		i++
 	}
 	return out.String()
 }
@@ -112,41 +137,64 @@ func lexicalRedact(sql string) string {
 	i := 0
 	for i < len(sql) {
 		if sql[i] == '\'' || sql[i] == '"' {
-			out.WriteByte('?'); i++
+			out.WriteByte('?')
+			i++
 			quote := sql[i-1]
 			for i < len(sql) {
-				if sql[i] == '\\' && i+1 < len(sql) { i += 2; continue }
-				if sql[i] == quote { i++; break }
+				if sql[i] == '\\' && i+1 < len(sql) {
+					i += 2
+					continue
+				}
+				if sql[i] == quote {
+					i++
+					break
+				}
 				i++
 			}
 			continue
 		}
 		if isDigit(sql[i]) {
 			if i+1 < len(sql) && sql[i] == '0' && (sql[i+1] == 'x' || sql[i+1] == 'X') {
-				out.WriteByte('?'); i += 2
-				for i < len(sql) && isHexDigit(sql[i]) { i++ }
+				out.WriteByte('?')
+				i += 2
+				for i < len(sql) && isHexDigit(sql[i]) {
+					i++
+				}
 				continue
 			}
-			if i > 0 && isIdentChar(sql[i-1]) { out.WriteByte(sql[i]); i++; continue }
-			out.WriteByte('?'); i++
-			for i < len(sql) && (isDigit(sql[i]) || sql[i] == '.') { i++ }
+			if i > 0 && isIdentChar(sql[i-1]) {
+				out.WriteByte(sql[i])
+				i++
+				continue
+			}
+			out.WriteByte('?')
+			i++
+			for i < len(sql) && (isDigit(sql[i]) || sql[i] == '.') {
+				i++
+			}
 			continue
 		}
 		if sql[i] == '-' && i+1 < len(sql) && isDigit(sql[i+1]) {
 			if i == 0 || (!isIdentChar(sql[i-1]) && sql[i-1] != ')') {
-				out.WriteByte('?'); i++
-				for i < len(sql) && (isDigit(sql[i]) || sql[i] == '.') { i++ }
+				out.WriteByte('?')
+				i++
+				for i < len(sql) && (isDigit(sql[i]) || sql[i] == '.') {
+					i++
+				}
 				continue
 			}
 		}
-		out.WriteByte(sql[i]); i++
+		out.WriteByte(sql[i])
+		i++
 	}
 	return out.String()
 }
 
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+func isDigit(c byte) bool    { return c >= '0' && c <= '9' }
 func isHexDigit(c byte) bool { return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') }
-func isIdentChar(c byte) bool { return isDigit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' }
+func isIdentChar(c byte) bool {
+	return isDigit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
 
 // --- Semantic Validation (basic structural checks only) ---
 
@@ -154,4 +202,3 @@ func validateSemantics(stmt vitess.Statement) *ParseError {
 	// Lightweight checks using Vitess APIs.
 	return nil
 }
-

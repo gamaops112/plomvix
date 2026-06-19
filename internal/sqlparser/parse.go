@@ -9,9 +9,13 @@ import (
 
 func isEmptySQL(sql string) bool {
 	s := strings.TrimSpace(sql)
-	if s == "" { return true }
+	if s == "" {
+		return true
+	}
 	for _, r := range s {
-		if r != ';' && r != ' ' && r != '\t' && r != '\n' && r != '\r' { return false }
+		if r != ';' && r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			return false
+		}
 	}
 	return true
 }
@@ -30,7 +34,9 @@ func mapVitessError(err error, sql string, offset int) *ParseError {
 
 // Parse parses a single SQL statement with strict DDL enforcement.
 func (v *vitessParser) Parse(sql string) (Statement, error) {
-	if isEmptySQL(sql) { return nil, ErrEmptySQL }
+	if isEmptySQL(sql) {
+		return nil, ErrEmptySQL
+	}
 
 	stmt, err := v.p.Parse(sql)
 	if err != nil {
@@ -60,22 +66,32 @@ func (v *vitessParser) Parse(sql string) (Statement, error) {
 
 // ParseMulti parses multiple semicolon-separated statements (fail-fast).
 func (v *vitessParser) ParseMulti(sql string) ([]Statement, error) {
-	if isEmptySQL(sql) { return nil, ErrEmptySQL }
+	if isEmptySQL(sql) {
+		return nil, ErrEmptySQL
+	}
 
 	pieces, err := v.p.SplitStatementToPieces(sql)
-	if err != nil { return nil, mapVitessError(err, sql, -1) }
+	if err != nil {
+		return nil, mapVitessError(err, sql, -1)
+	}
 
 	var results []Statement
 	anyParsed := false
 	for _, piece := range pieces {
 		trimmed := strings.TrimSpace(piece)
-		if trimmed == "" || trimmed == ";" { continue }
+		if trimmed == "" || trimmed == ";" {
+			continue
+		}
 		anyParsed = true
 		stmt, parseErr := v.Parse(trimmed)
-		if parseErr != nil { return nil, parseErr }
+		if parseErr != nil {
+			return nil, parseErr
+		}
 		results = append(results, stmt)
 	}
-	if !anyParsed { return nil, ErrEmptySQL }
+	if !anyParsed {
+		return nil, ErrEmptySQL
+	}
 	return results, nil
 }
 
@@ -96,10 +112,16 @@ func (v *vitessParser) ParseScript(sql string) ([]Statement, []*ParseError) {
 
 	for _, piece := range pieces {
 		trimmed := strings.TrimSpace(piece)
-		if trimmed == "" || trimmed == ";" { continue }
+		if trimmed == "" || trimmed == ";" {
+			continue
+		}
 
 		pieceStart := strings.Index(sql[prevEnd:], trimmed)
-		if pieceStart < 0 { pieceStart = prevEnd } else { pieceStart += prevEnd }
+		if pieceStart < 0 {
+			pieceStart = prevEnd
+		} else {
+			pieceStart += prevEnd
+		}
 
 		stmt, parseErr := v.Parse(trimmed)
 		if parseErr != nil {
@@ -125,19 +147,27 @@ func (v *vitessParser) ParseScript(sql string) ([]Statement, []*ParseError) {
 		prevEnd = pieceStart + len(trimmed)
 	}
 
-	if len(stmts) == 0 && len(errs) == 0 { return nil, []*ParseError{{Kind: "syntax", Message: ErrEmptySQL.Error(), Offset: -1, Line: 1, Column: 1}} }
+	if len(stmts) == 0 && len(errs) == 0 {
+		return nil, []*ParseError{{Kind: "syntax", Message: ErrEmptySQL.Error(), Offset: -1, Line: 1, Column: 1}}
+	}
 	return stmts, errs
 }
 
 // Type returns the statement type.
 func (s *stmtWrapper) Type() StmtType {
 	switch s.ast.(type) {
-	case *vitess.Select: return StmtSelect
-	case *vitess.Insert: return StmtInsert
-	case *vitess.Update: return StmtUpdate
-	case *vitess.Delete: return StmtDelete
+	case *vitess.Select:
+		return StmtSelect
+	case *vitess.Insert:
+		return StmtInsert
+	case *vitess.Update:
+		return StmtUpdate
+	case *vitess.Delete:
+		return StmtDelete
 	default:
-		if isDDL(s.ast) { return StmtDDL }
+		if isDDL(s.ast) {
+			return StmtDDL
+		}
 		return StmtUnknown
 	}
 }
@@ -163,18 +193,28 @@ func (s *stmtWrapper) TargetTables() []string {
 	var result []string
 	for _, t := range rawTables {
 		name := strings.ToLower(t)
-		if idx := strings.LastIndex(name, "."); idx >= 0 { name = name[idx+1:] }
-		if cteNames[name] || name == "dual" { continue }
-		if !seen[name] { seen[name] = true; result = append(result, name) }
+		if idx := strings.LastIndex(name, "."); idx >= 0 {
+			name = name[idx+1:]
+		}
+		if cteNames[name] || name == "dual" {
+			continue
+		}
+		if !seen[name] {
+			seen[name] = true
+			result = append(result, name)
+		}
 	}
 	return result
 }
 
 func collectCTENames(node vitess.SQLNode, names map[string]bool) {
-	if node == nil { return }
+	if node == nil {
+		return
+	}
 	vitess.Walk(func(node vitess.SQLNode) (bool, error) {
-		if cte, ok := node.(*vitess.CommonTableExpr); ok { names[strings.ToLower(cte.ID.String())] = true }
+		if cte, ok := node.(*vitess.CommonTableExpr); ok {
+			names[strings.ToLower(cte.ID.String())] = true
+		}
 		return true, nil
 	}, node)
 }
-

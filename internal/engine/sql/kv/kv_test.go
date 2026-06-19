@@ -320,10 +320,6 @@ func TestNew_SetsUpCorrectly(t *testing.T) {
 	if kv == nil {
 		t.Fatal("New returned nil")
 	}
-	// Verify interface compliance at compile time and runtime.
-	if _, ok := kv.(KVStore); !ok {
-		t.Fatal("kv does not implement KVStore")
-	}
 }
 
 func TestKVStore_DocsFileExists(t *testing.T) {

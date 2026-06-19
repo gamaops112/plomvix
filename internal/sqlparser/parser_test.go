@@ -226,7 +226,9 @@ func TestConcurrent_Parse(t *testing.T) {
 
 func TestDocsFile(t *testing.T) {
 	data, err := os.ReadFile("../../docs/sql_parser.md")
-	if err != nil { t.Skip("docs/sql_parser.md not yet created") }
+	if err != nil {
+		t.Skip("docs/sql_parser.md not yet created")
+	}
 	_ = data
 }
 
@@ -235,9 +237,13 @@ func TestDocsFile(t *testing.T) {
 func TestNormalize(t *testing.T) {
 	p, _ := New()
 	stmt, err := p.Parse("SELECT 1, 'hello' FROM users WHERE id = 42")
-	if err != nil { t.Fatalf("Parse: %v", err) }
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
 	norm := stmt.Normalize()
-	if norm == "" { t.Error("Normalize returned empty") }
+	if norm == "" {
+		t.Error("Normalize returned empty")
+	}
 	t.Logf("Normalized: %s", norm)
 }
 
@@ -253,16 +259,24 @@ func TestFingerprint(t *testing.T) {
 func TestSanitize(t *testing.T) {
 	p, _ := New()
 	stmt, err := p.Parse("SELECT 'secret' FROM users WHERE id = 123")
-	if err != nil { t.Fatalf("Parse: %v", err) }
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
 	san := stmt.Sanitize()
-	if strings.Contains(san, "secret") { t.Errorf("sanitized contains PII: %s", san) }
-	if strings.Contains(san, "123") { t.Errorf("sanitized contains literal: %s", san) }
+	if strings.Contains(san, "secret") {
+		t.Errorf("sanitized contains PII: %s", san)
+	}
+	if strings.Contains(san, "123") {
+		t.Errorf("sanitized contains literal: %s", san)
+	}
 }
 
 func TestStripComments(t *testing.T) {
 	p, _ := New()
 	stmt, err := p.Parse("SELECT 1 /* hidden */ FROM users -- note\nWHERE id = 1")
-	if err != nil { t.Fatalf("Parse: %v", err) }
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
 	stripped := stmt.StripComments()
 	if strings.Contains(stripped, "hidden") || strings.Contains(stripped, "note") {
 		t.Errorf("comments not stripped: %s", stripped)
@@ -272,28 +286,42 @@ func TestStripComments(t *testing.T) {
 func TestParseScript(t *testing.T) {
 	p, _ := New()
 	stmts, errs := p.ParseScript("SELECT 1; SELECT 2; SELECT * FROM; SELECT 3")
-	if len(stmts)+len(errs) < 2 { t.Errorf("expected at least 2 results, got %d stmts + %d errs", len(stmts), len(errs)) }
+	if len(stmts)+len(errs) < 2 {
+		t.Errorf("expected at least 2 results, got %d stmts + %d errs", len(stmts), len(errs))
+	}
 	// At least one error expected.
-	if len(errs) == 0 && len(stmts) < 3 { t.Errorf("expected some errors or 3+ stmts, got %d stmts, %d errs", len(stmts), len(errs)) }
+	if len(errs) == 0 && len(stmts) < 3 {
+		t.Errorf("expected some errors or 3+ stmts, got %d stmts, %d errs", len(stmts), len(errs))
+	}
 }
 
 func TestParseScript_Empty(t *testing.T) {
 	p, _ := New()
 	_, errs := p.ParseScript("")
-	if len(errs) == 0 { t.Error("expected errors for empty input") }
+	if len(errs) == 0 {
+		t.Error("expected errors for empty input")
+	}
 }
 
 func TestLexicalRedact(t *testing.T) {
 	// Test numeric boundaries.
 	result := lexicalRedact("SELECT col1 FROM table2 WHERE id = 123")
-	if !strings.Contains(result, "col1") { t.Errorf("identifier lost: %s", result) }
-	if strings.Contains(result, "123") { t.Errorf("literal not redacted: %s", result) }
+	if !strings.Contains(result, "col1") {
+		t.Errorf("identifier lost: %s", result)
+	}
+	if strings.Contains(result, "123") {
+		t.Errorf("literal not redacted: %s", result)
+	}
 
 	// Test hex.
 	result = lexicalRedact("SELECT 0xFF, 0xAB")
-	if strings.Contains(result, "0x") { t.Errorf("hex not redacted: %s", result) }
+	if strings.Contains(result, "0x") {
+		t.Errorf("hex not redacted: %s", result)
+	}
 
 	// Test negative number.
 	result = lexicalRedact("SELECT -42")
-	if strings.Contains(result, "42") { t.Errorf("negative not redacted: %s", result) }
+	if strings.Contains(result, "42") {
+		t.Errorf("negative not redacted: %s", result)
+	}
 }
