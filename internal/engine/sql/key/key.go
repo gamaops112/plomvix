@@ -37,7 +37,94 @@ var (
 	ErrInvalidKey          = errors.New("sql/key: invalid key")
 	ErrKindMismatch        = errors.New("sql/key: kind mismatch")
 	ErrNotComposite        = errors.New("sql/key: key is not composite")
+	ErrEmptyKey            = errors.New("sql/key: empty input")
+	ErrTruncated           = errors.New("sql/key: truncated input")
+	ErrBadTag              = errors.New("sql/key: unknown keyspace tag")
+	ErrNoPKColumns         = errors.New("sql/key: no primary key columns")
 )
+
+// Value is a tagged column value used in composite key encoding.
+type Value struct {
+	kind Kind
+	u    uint64
+	s    string
+	b    []byte
+}
+
+// Uint64 creates a uint64 Value.
+func Uint64(v uint64) Value { return Value{kind: KindUint64, u: v} }
+
+// Int64 creates an int64 Value.
+func Int64(v int64) Value { return Value{kind: KindInt64, u: uint64(v)} }
+
+// String creates a string Value.
+func String(v string) Value { return Value{kind: KindString, s: v} }
+
+// Bytes creates a bytes Value (takes ownership; caller should not mutate).
+func Bytes(v []byte) Value {
+	cp := make([]byte, len(v))
+	copy(cp, v)
+	return Value{kind: KindBytes, b: cp}
+}
+
+// Kind returns the value's kind.
+func (v Value) Kind() Kind { return v.kind }
+
+// AsUint64 returns the uint64 value and true if the kind matches.
+func (v Value) AsUint64() (uint64, bool) {
+	if v.kind != KindUint64 {
+		return 0, false
+	}
+	return v.u, true
+}
+
+// AsInt64 returns the int64 value and true if the kind matches.
+func (v Value) AsInt64() (int64, bool) {
+	if v.kind != KindInt64 {
+		return 0, false
+	}
+	return int64(v.u), true
+}
+
+// AsString returns the string value and true if the kind matches.
+func (v Value) AsString() (string, bool) {
+	if v.kind != KindString {
+		return "", false
+	}
+	return v.s, true
+}
+
+// AsBytes returns a COPY of the bytes value and true if the kind matches.
+func (v Value) AsBytes() ([]byte, bool) {
+	if v.kind != KindBytes {
+		return nil, false
+	}
+	cp := make([]byte, len(v.b))
+	copy(cp, v.b)
+	return cp, true
+}
+
+// Equal reports whether v and other have the same kind and value.
+func (v Value) Equal(other Value) bool {
+	if v.kind != other.kind {
+		return false
+	}
+	switch v.kind {
+	case KindUint64, KindInt64:
+		return v.u == other.u
+	case KindString:
+		return v.s == other.s
+	case KindBytes:
+		return bytes.Equal(v.b, other.b)
+	}
+	return false
+}
+
+// FromBytes creates a Key from raw bytes, treating them as KindBytes.
+// Useful for wrapping wire-level key bytes into a Key for KVStore operations.
+func FromBytes(b []byte) Key {
+	return EncodeBytes(b)
+}
 
 // validateField checks that f is within bounds of data and has a valid length
 // for its Kind. Uses overflow-safe arithmetic.
