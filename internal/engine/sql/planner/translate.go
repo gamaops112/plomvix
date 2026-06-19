@@ -165,7 +165,7 @@ func translateOrderBy(op Operator, orders vitess.OrderBy) (Operator, error) {
 }
 
 // translateGroupBy handles GROUP BY and aggregate functions.
-func translateGroupBy(ctx context.Context, op Operator, sel *vitess.Select, engSchema *engine.Schema) (Operator, error) {
+func translateGroupBy(_ context.Context, op Operator, sel *vitess.Select, engSchema *engine.Schema) (Operator, error) {
 	schema := op.Schema()
 	var groupKeys []int
 	if sel.GroupBy != nil {

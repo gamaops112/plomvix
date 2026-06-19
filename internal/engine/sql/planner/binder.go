@@ -280,18 +280,6 @@ func (p *BetweenPredicate) Eval(row engine.Row) (engine.Datum, error) {
 	return engine.Datum{Type: engine.TypeBool, Value: geLo && leHi}, nil
 }
 
-func bindInPredicate(e *vitess.ComparisonExpr, schema engine.Schema) (BoundExpr, error) {
-	colName, ok := e.Left.(*vitess.ColName)
-	if !ok {
-		return nil, fmt.Errorf("%w: IN requires column reference", ErrUnsupportedFeature)
-	}
-	idx := colIndex(colName.Name.String(), schema)
-	if idx < 0 {
-		return nil, fmt.Errorf("planner: IN column %q not found", colName.Name.String())
-	}
-	return bindInPredicateFromExpr(e.Right, idx)
-}
-
 func bindInPredicatePlanner(e *vitess.ComparisonExpr, ps PlannerSchema) (BoundExpr, error) {
 	colName, ok := e.Left.(*vitess.ColName)
 	if !ok {
@@ -320,18 +308,6 @@ func bindInPredicateFromExpr(right vitess.Expr, idx int) (BoundExpr, error) {
 		values = append(values, literalToDatum(lit))
 	}
 	return &InPredicate{ColIdx: idx, Values: values}, nil
-}
-
-func bindBetweenPredicate(e *vitess.BetweenExpr, schema engine.Schema) (BoundExpr, error) {
-	colName, ok := e.Left.(*vitess.ColName)
-	if !ok {
-		return nil, fmt.Errorf("%w: BETWEEN requires column reference", ErrUnsupportedFeature)
-	}
-	idx := colIndex(colName.Name.String(), schema)
-	if idx < 0 {
-		return nil, fmt.Errorf("planner: BETWEEN column %q not found", colName.Name.String())
-	}
-	return bindBetweenPredicateFromBounds(e.From, e.To, idx)
 }
 
 func bindBetweenPredicatePlanner(e *vitess.BetweenExpr, ps PlannerSchema) (BoundExpr, error) {

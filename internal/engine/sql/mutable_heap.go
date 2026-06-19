@@ -45,7 +45,7 @@ func AsMutable(a *tableHeapAdapter) MutableTableHeap {
 	return &heapMutableAdapter{a: a}
 }
 
-func (m *heapMutableAdapter) checkWriteConflictLocked(tx engine.TxContext, rowID uint64) error {
+func (m *heapMutableAdapter) checkWriteConflictLocked(_ engine.TxContext, rowID uint64) error {
 	gen, _, err := engine.DecodeRowID(rowID)
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (m *heapMutableAdapter) BatchMutate(ctx context.Context, tx engine.TxContex
 	return rowsAffected, nil
 }
 
-func (m *heapMutableAdapter) applyLocked(ctx context.Context, tx engine.TxContext, mut RowMutation) error {
+func (m *heapMutableAdapter) applyLocked(_ context.Context, _ engine.TxContext, mut RowMutation) error {
 	_, _, err := engine.DecodeRowID(mut.RowID)
 	if err != nil {
 		return err

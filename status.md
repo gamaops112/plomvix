@@ -21,7 +21,7 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 | | 28 | **DML Execution** (`INSERT` / `UPDATE` / `DELETE`) | `internal/engine/sql/exec` | ✅ **Ready for Coding** | Unblocks data insertion. Uses MVCC timestamps. |
 | **5. Advanced Execution** | 29 | Joins & Multi-Table Execution | `.../planner`, `.../exec` | ✅ **Ready for Coding** | Nested Loop & Hash Joins. |
 | | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Done** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
-| **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | 🔮 **Future** | Postgres Simple Query or Custom TCP. |
+| **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | ✅ **Ready for Coding** | PostgreSQL Wire Protocol v3.0 (Simple & Extended). |
 
 ***
 
@@ -37,4 +37,4 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 ***
 
 ### 🎯 Immediate Action Items
-1. **Execute Plans 28 & 29 (DML & Joins Execution):** Hand the approved DML and Joins execution plans to the coding agent.
+1. **Execute Plans 28, 29, & 31 (DML, Joins, & Wire Protocol/API Server Execution):** Hand the approved DML, Joins, and Wire Protocol plans to the coding agent.
