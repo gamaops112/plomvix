@@ -230,3 +230,15 @@ func (s *stmtWrapper) RawInsert() *vitess.Insert {
 	insert, _ := s.ast.(*vitess.Insert)
 	return insert
 }
+
+// RawUpdate returns the underlying Vitess Update node, or nil if not an UPDATE.
+func (s *stmtWrapper) RawUpdate() *vitess.Update {
+	update, _ := s.ast.(*vitess.Update)
+	return update
+}
+
+// RawDelete returns the underlying Vitess Delete node, or nil if not a DELETE.
+func (s *stmtWrapper) RawDelete() *vitess.Delete {
+	del, _ := s.ast.(*vitess.Delete)
+	return del
+}

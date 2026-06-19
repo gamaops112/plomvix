@@ -111,7 +111,7 @@ func (e *SQLEngine) Name() string { return "sql" }
 // This is enforced by code structure: the DML arm is above the SELECT path.
 func (e *SQLEngine) Execute(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 	// Allocate WriteTxID exactly once for DML and DDL.
-	if req.Stmt.Type() == sqlparser.StmtInsert || req.Stmt.Type() == sqlparser.StmtDDL {
+	if req.Stmt.Type() == sqlparser.StmtInsert || req.Stmt.Type() == sqlparser.StmtUpdate || req.Stmt.Type() == sqlparser.StmtDelete || req.Stmt.Type() == sqlparser.StmtDDL {
 		req.TxContext.WriteTxID = e.txm.NextWriteTx()
 	}
 
@@ -123,6 +123,10 @@ func (e *SQLEngine) Execute(ctx context.Context, req *engine.Request) (*engine.R
 		return e.executeDDL(ctx, req)
 	case sqlparser.StmtInsert:
 		return e.execInsert(ctx, req)
+	case sqlparser.StmtUpdate:
+		return e.execUpdate(ctx, req)
+	case sqlparser.StmtDelete:
+		return e.execDelete(ctx, req)
 	default:
 		return nil, ErrUnsupportedFeature
 	}

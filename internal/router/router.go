@@ -11,6 +11,8 @@ import (
 	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/engine"
 	"github.com/plomvix/plomvix/internal/sqlparser"
+
+	vitess "vitess.io/vitess/go/vt/sqlparser"
 )
 
 // Sentinel errors.
@@ -56,6 +58,8 @@ func (r *Router) Route(ctx context.Context, userID uint64, stmt sqlparser.Statem
 		return r.routeDDL(ctx, userID, stmt)
 	case sqlparser.StmtInsert:
 		return r.routeInsert(ctx, userID, stmt)
+	case sqlparser.StmtUpdate, sqlparser.StmtDelete:
+		return r.routeUpdateDelete(ctx, userID, stmt)
 	default:
 		return nil, ErrUnsupportedStatement
 	}
@@ -153,4 +157,67 @@ func (r *Router) routeInsert(ctx context.Context, userID uint64, stmt sqlparser.
 		UserID:    userID,
 		TxContext: engine.TxContext{},
 	})
+}
+
+// routeUpdateDelete dispatches UPDATE/DELETE to the owning engine with write permission check.
+func (r *Router) routeUpdateDelete(ctx context.Context, userID uint64, stmt sqlparser.Statement) (*engine.Result, error) {
+	tableName, err := extractUpdateDeleteTableName(stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := r.catalog.GetTable(ctx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	ok, err := r.catalog.CheckPermission(ctx, userID, info.TableID, catalog.ActionWrite)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrPermissionDenied
+	}
+
+	eng, ok := r.engines[info.EngineName]
+	if !ok {
+		return nil, ErrEngineNotFound
+	}
+
+	return eng.Execute(ctx, &engine.Request{
+		Stmt:      stmt,
+		UserID:    userID,
+		TxContext: engine.TxContext{},
+	})
+}
+
+// extractUpdateDeleteTableName extracts the target table name from an UPDATE or DELETE AST.
+// Guards against multi-table statements with len(TableExprs) == 1.
+func extractUpdateDeleteTableName(stmt sqlparser.Statement) (string, error) {
+	if upd := stmt.RawUpdate(); upd != nil {
+		return extractFromTableExprs(upd.TableExprs)
+	}
+	if del := stmt.RawDelete(); del != nil {
+		return extractFromTableExprs(del.TableExprs)
+	}
+	return "", ErrUnsupportedStatement
+}
+
+func extractFromTableExprs(exprs vitess.TableExprs) (string, error) {
+	if len(exprs) != 1 {
+		return "", ErrUnsupportedStatement
+	}
+	aliased, ok := exprs[0].(*vitess.AliasedTableExpr)
+	if !ok {
+		return "", ErrUnsupportedStatement
+	}
+	tname, ok := aliased.Expr.(vitess.TableName)
+	if !ok {
+		return "", ErrUnsupportedStatement
+	}
+	name := tname.Name.String()
+	if name == "" {
+		return "", ErrNoTargetTable
+	}
+	return name, nil
 }
