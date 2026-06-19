@@ -192,6 +192,12 @@ type Catalog interface {
 	CreateUser(ctx context.Context, username, password string, isAdmin bool) error
 	Authenticate(ctx context.Context, username, password string) (UserInfo, error)
 
+	// DDL lifecycle (safe ordering: allocate → physical create → register).
+	AllocateTableID(ctx context.Context) (uint64, error)
+	RegisterTable(ctx context.Context, tableID uint64, engineName, tableName string, schemaPayload []byte) error
+	// CheckGlobalPermission checks if user can perform a global action (e.g. DDL).
+	CheckGlobalPermission(ctx context.Context, userID uint64, action Action) (bool, error)
+
 	// Enterprise RBAC.
 	CreateRole(ctx context.Context, roleName string) error
 	DropRole(ctx context.Context, roleName string) error

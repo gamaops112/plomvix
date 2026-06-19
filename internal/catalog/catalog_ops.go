@@ -663,3 +663,81 @@ func (c *catalog) GetSchemaHistory(ctx context.Context, tableName string) ([]Sch
 	}
 	return result, nil
 }
+
+// AllocateTableID atomically reserves and returns the next table ID.
+// The caller is responsible for creating the physical heap and calling
+// RegisterTable to complete the registration.
+func (c *catalog) AllocateTableID(ctx context.Context) (uint64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.started || c.cache == nil {
+		return 0, ErrCatalogNotStarted
+	}
+	id := c.cache.nextTableID
+	c.cache.nextTableID++
+	return id, nil
+}
+
+// RegisterTable stores table metadata in the catalog system tables and cache.
+// Call only after the physical heap has been successfully created.
+// Must hold no catalog lock during physical I/O (the heap creation call).
+func (c *catalog) RegisterTable(ctx context.Context, tableID uint64, engineName, tableName string, schemaPayload []byte) error {
+	if engineName == "" || tableName == "" {
+		return ErrEmptyName
+	}
+	c.mu.Lock()
+	if !c.started || c.cache == nil {
+		c.mu.Unlock()
+		return ErrCatalogNotStarted
+	}
+	if _, exists := c.cache.tables[tableName]; exists {
+		c.mu.Unlock()
+		return ErrDuplicateTable
+	}
+	if _, p := c.cache.pendingTables[tableName]; p {
+		c.mu.Unlock()
+		return ErrConflict
+	}
+	txID := c.reserveTx()
+	c.cache.pendingTables[tableName] = struct{}{}
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		if c.cache != nil {
+			delete(c.cache.pendingTables, tableName)
+		}
+		c.mu.Unlock()
+	}()
+	if err := c.metaHandle.Update(ctx, heap.Tx{ID: txID}, []any{MetaKeyNextTxID}, []any{MetaKeyNextTxID, txID}); err != nil {
+		return fmt.Errorf("catalog: meta: %w", err)
+	}
+	version := uint64(1)
+	row := []any{tableID, engineName, tableName, schemaPayload, version}
+	if err := c.tablesHandle.Insert(ctx, heap.Tx{ID: txID}, row); err != nil {
+		return fmt.Errorf("catalog: insert table: %w", err)
+	}
+	ts := uint64(time.Now().Unix())
+	histRow := []any{c.cache.nextHistoryID, tableID, version, "CREATE", schemaPayload, ts}
+	if err := c.historyHandle.Insert(ctx, heap.Tx{ID: txID}, histRow); err != nil {
+		return fmt.Errorf("catalog: history: %w", err)
+	}
+	if err := c.auditLog(ctx, txID, "CREATE_TABLE", "table", tableName); err != nil {
+		return fmt.Errorf("catalog: audit: %w", err)
+	}
+	c.mu.Lock()
+	ti := TableInfo{TableID: tableID, EngineName: engineName, TableName: tableName, SchemaPayload: schemaPayload, SchemaVersion: version}
+	c.cache.tables[tableName] = copyTableInfo(ti)
+	c.cache.nextHistoryID++
+	c.cache.nextAuditLogID++
+	c.schemaVersion++
+	c.mu.Unlock()
+	return nil
+}
+
+// CheckGlobalPermission checks if the user has a global action permission
+// (e.g. DDL). Admins always pass. Non-admins pass if they hold a role with
+// the given action on tableID 0.
+func (c *catalog) CheckGlobalPermission(ctx context.Context, userID uint64, action Action) (bool, error) {
+	// Global permission is checked against tableID 0.
+	return c.CheckPermission(ctx, userID, 0, action)
+}

@@ -7,7 +7,6 @@ package router
 import (
 	"context"
 	"errors"
-	"math"
 
 	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/engine"
@@ -21,12 +20,14 @@ var (
 	ErrPermissionDenied            = errors.New("router: permission denied")
 	ErrUnsupportedStatement        = errors.New("router: statement type not supported in basic tier")
 	ErrNoTargetTable               = errors.New("router: no target table found")
+	ErrNoDefaultEngine             = errors.New("router: no default engine registered")
 )
 
 // Router dispatches parsed statements to registered engines.
 type Router struct {
-	catalog catalog.Catalog
-	engines map[string]engine.Engine
+	catalog       catalog.Catalog
+	engines       map[string]engine.Engine
+	defaultEngine string
 }
 
 // New creates a new Router with the given catalog and engine registry.
@@ -40,15 +41,26 @@ func New(cat catalog.Catalog) *Router {
 // RegisterEngine adds an engine to the router's dispatch table.
 func (r *Router) RegisterEngine(e engine.Engine) {
 	r.engines[e.Name()] = e
+	if r.defaultEngine == "" {
+		r.defaultEngine = e.Name()
+	}
 }
 
 // Route validates the statement, resolves tables, checks permissions, and
 // dispatches to the appropriate engine.
-func (r *Router) Route(ctx context.Context, userID uint64, stmt sqlparser.Statement) (engine.RowStream, error) {
-	if stmt.Type() != sqlparser.StmtSelect {
+func (r *Router) Route(ctx context.Context, userID uint64, stmt sqlparser.Statement) (*engine.Result, error) {
+	switch stmt.Type() {
+	case sqlparser.StmtSelect:
+		return r.routeSelect(ctx, userID, stmt)
+	case sqlparser.StmtDDL:
+		return r.routeDDL(ctx, userID, stmt)
+	default:
 		return nil, ErrUnsupportedStatement
 	}
+}
 
+// routeSelect dispatches a SELECT to the correct engine.
+func (r *Router) routeSelect(ctx context.Context, userID uint64, stmt sqlparser.Statement) (*engine.Result, error) {
 	tables := stmt.TargetTables()
 	if len(tables) == 0 {
 		return nil, ErrNoTargetTable
@@ -84,6 +96,23 @@ func (r *Router) Route(ctx context.Context, userID uint64, stmt sqlparser.Statem
 	return eng.Execute(ctx, &engine.Request{
 		Stmt:      stmt,
 		UserID:    userID,
-		TxContext: engine.TxContext{ReadTxID: math.MaxUint64},
+		TxContext: engine.TxContext{},
+	})
+}
+
+// routeDDL dispatches DDL (CREATE TABLE / DROP TABLE) to the default engine.
+func (r *Router) routeDDL(ctx context.Context, userID uint64, stmt sqlparser.Statement) (*engine.Result, error) {
+	engName := r.defaultEngine
+	if engName == "" {
+		return nil, ErrNoDefaultEngine
+	}
+	eng, ok := r.engines[engName]
+	if !ok {
+		return nil, ErrEngineNotFound
+	}
+	return eng.Execute(ctx, &engine.Request{
+		Stmt:      stmt,
+		UserID:    userID,
+		TxContext: engine.TxContext{},
 	})
 }

@@ -73,7 +73,8 @@ func (r Row) DeepCopy() Row {
 
 // TxContext holds transaction-scoped metadata for query execution.
 type TxContext struct {
-	ReadTxID uint64
+	ReadTxID  uint64
+	WriteTxID uint64 // Used for DDL/DML mutation timestamps. 0 = read-only.
 }
 
 // RowStream is an iterator over query result rows.
@@ -81,6 +82,16 @@ type RowStream interface {
 	Next(ctx context.Context) (Row, error) // Returns io.EOF when exhausted
 	Schema() Schema                        // MUST return a deep copy
 	Close() error                          // Idempotent
+}
+
+// Result encapsulates the outcome of an engine execution.
+// For SELECT: Stream is non-nil, RowsAffected is 0.
+// For DDL: Stream is nil, RowsAffected is 0, Message has status.
+// For DML: Stream may be nil, RowsAffected is non-zero.
+type Result struct {
+	Stream       RowStream // Non-nil for SELECT. nil for DDL/DML.
+	RowsAffected int64     // Non-zero for DML. 0 for DDL/SELECT.
+	Message      string    // Human-readable status for DDL.
 }
 
 // Request encapsulates a parsed statement with execution context.
@@ -93,5 +104,5 @@ type Request struct {
 // Engine is a pluggable query execution backend.
 type Engine interface {
 	Name() string
-	Execute(ctx context.Context, req *Request) (RowStream, error)
+	Execute(ctx context.Context, req *Request) (*Result, error)
 }

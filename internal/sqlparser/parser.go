@@ -40,6 +40,9 @@ type Statement interface {
 	Fingerprint() string
 	Sanitize() string
 	StripComments() string
+
+	// DDL accessor (returns nil for non-DDL statements).
+	RawDDL() vitess.DDLStatement
 }
 
 // ParseError supersedes the Basic tier's SyntaxError with byte offset support.

@@ -12,11 +12,11 @@ import (
 // mockEngine implements engine.Engine for testing.
 type mockEngine struct {
 	name    string
-	execute func(ctx context.Context, req *engine.Request) (engine.RowStream, error)
+	execute func(ctx context.Context, req *engine.Request) (*engine.Result, error)
 }
 
 func (m *mockEngine) Name() string { return m.name }
-func (m *mockEngine) Execute(ctx context.Context, req *engine.Request) (engine.RowStream, error) {
+func (m *mockEngine) Execute(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 	return m.execute(ctx, req)
 }
 
@@ -44,6 +44,13 @@ func (m *mockCatalog) CreateUser(ctx context.Context, u, p string, a bool) error
 func (m *mockCatalog) Authenticate(ctx context.Context, u, p string) (catalog.UserInfo, error) {
 	return catalog.UserInfo{}, nil
 }
+func (m *mockCatalog) AllocateTableID(ctx context.Context) (uint64, error) { return 100, nil }
+func (m *mockCatalog) RegisterTable(ctx context.Context, tableID uint64, eng, name string, payload []byte) error {
+	return nil
+}
+func (m *mockCatalog) CheckGlobalPermission(ctx context.Context, uid uint64, a catalog.Action) (bool, error) {
+	return m.permOk, m.permErr
+}
 func (m *mockCatalog) CreateRole(ctx context.Context, name string) error               { return nil }
 func (m *mockCatalog) DropRole(ctx context.Context, name string) error                 { return nil }
 func (m *mockCatalog) AssignRole(ctx context.Context, u, r string) error               { return nil }
@@ -68,9 +75,9 @@ func TestRoute_Select(t *testing.T) {
 	}
 	r := New(cat)
 	called := false
-	r.RegisterEngine(&mockEngine{name: "sql", execute: func(ctx context.Context, req *engine.Request) (engine.RowStream, error) {
+	r.RegisterEngine(&mockEngine{name: "sql", execute: func(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 		called = true
-		return nil, nil
+		return &engine.Result{}, nil
 	}})
 
 	ctx := context.Background()

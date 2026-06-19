@@ -218,3 +218,9 @@ func collectCTENames(node vitess.SQLNode, names map[string]bool) {
 		return true, nil
 	}, node)
 }
+
+// RawDDL returns the underlying Vitess DDL node, or nil if not a DDL statement.
+func (s *stmtWrapper) RawDDL() vitess.DDLStatement {
+	ddl, _ := s.ast.(vitess.DDLStatement)
+	return ddl
+}
