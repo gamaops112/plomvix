@@ -28,11 +28,11 @@ func (n *FilterNode) Next(ctx context.Context) (engine.Row, error) {
 	for {
 		row, err := n.child.Next(ctx)
 		if err != nil {
-			return nil, err
+			return engine.Row{}, err
 		}
 		d, err := n.pred.Eval(row)
 		if err != nil {
-			return nil, err
+			return engine.Row{}, err
 		}
 		if b, ok := d.Value.(bool); ok && b {
 			return row, nil
@@ -62,15 +62,15 @@ func (n *ProjectNode) Open(ctx context.Context) error { return n.child.Open(ctx)
 func (n *ProjectNode) Next(ctx context.Context) (engine.Row, error) {
 	row, err := n.child.Next(ctx)
 	if err != nil {
-		return nil, err
+		return engine.Row{}, err
 	}
-	out := make(engine.Row, len(n.exprs))
+	out := engine.Row{Datums: make([]engine.Datum, len(n.exprs))}
 	for i, pe := range n.exprs {
 		d, err := pe.Expr.Eval(row)
 		if err != nil {
-			return nil, err
+			return engine.Row{}, err
 		}
-		out[i] = d
+		out.Datums[i] = d
 	}
 	return out, nil
 }

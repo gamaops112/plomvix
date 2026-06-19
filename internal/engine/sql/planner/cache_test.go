@@ -94,22 +94,20 @@ func TestPlanTemplate_Build(t *testing.T) {
 
 type fakeTableHeap struct{ rows [][]byte }
 
-func (f *fakeTableHeap) Scan(ctx context.Context, tx engine.TxContext) (HeapScanIterator, error) {
-	return &fakeIter{rows: f.rows}, nil
-}
+func (f *fakeTableHeap) Scan(ctx context.Context, tx engine.TxContext) (HeapScanIterator, error) { return &fakeIter{rows: f.rows}, nil }
 
 type fakeIter struct {
 	rows [][]byte
 	idx  int
 }
 
-func (f *fakeIter) Next(ctx context.Context) ([]byte, error) {
+func (f *fakeIter) Next(ctx context.Context) ([]byte, uint64, error) {
 	if f.idx >= len(f.rows) {
-		return nil, io.EOF
+		return nil, 0, io.EOF
 	}
 	r := f.rows[f.idx]
 	f.idx++
-	return r, nil
+	return r, uint64(f.idx), nil
 }
 func (f *fakeIter) Close() error { return nil }
 

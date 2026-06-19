@@ -24,11 +24,11 @@ func TestDatumDeepCopy(t *testing.T) {
 }
 
 func TestRowDeepCopy(t *testing.T) {
-	r := Row{{Type: TypeInt64, Value: int64(42)}, {Type: TypeBytes, Value: []byte{1, 2}}}
+	r := Row{Datums: []Datum{{Type: TypeInt64, Value: int64(42)}, {Type: TypeBytes, Value: []byte{1, 2}}}}
 	cp := r.DeepCopy()
-	cp[0] = Datum{Type: TypeBool, Value: true}
-	cp[1].Value.([]byte)[0] = 99
-	if r[0].Value.(int64) != 42 || r[1].Value.([]byte)[0] != 1 {
+	cp.Datums[0] = Datum{Type: TypeBool, Value: true}
+	cp.Datums[1].Value.([]byte)[0] = 99
+	if r.Datums[0].Value.(int64) != 42 || r.Datums[1].Value.([]byte)[0] != 1 {
 		t.Error("Row DeepCopy leaked mutations")
 	}
 }

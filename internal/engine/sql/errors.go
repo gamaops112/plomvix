@@ -19,6 +19,11 @@ var (
 	ErrNotNullViolation = errors.New("sql engine: NOT NULL constraint violation")
 	ErrTxConflict       = errors.New("sql engine: WriteTxID monotonic conflict")
 
+	// Mutation errors.
+	ErrWhereRequired           = errors.New("sql engine: UPDATE and DELETE require a WHERE clause")
+	ErrHeapMutationUnsupported = errors.New("sql engine: target table heap does not support mutation")
+	ErrMissingRowID            = errors.New("sql engine: row has no physical RowID; cannot mutate")
+
 	// Constructor validation errors.
 	ErrNilCatalog       = errors.New("sql engine: catalog dependency is nil")
 	ErrNilTableRegistry = errors.New("sql engine: tableRegistry dependency is nil")

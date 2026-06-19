@@ -169,10 +169,10 @@ func TestConcreteSystemHeap_InsertScan(t *testing.T) {
 	if !ok {
 		t.Skip("adapter type assertion failed")
 	}
-	row := engine.Row{
+	row := engine.Row{Datums: []engine.Datum{
 		{Type: engine.TypeBytes, Value: []byte("hello")},
 		{Type: engine.TypeBytes, Value: []byte("world")},
-	}
+	}}
 	if err := adapter.heap.Insert(ctx, engine.TxContext{WriteTxID: 1}, row); err != nil {
 		t.Fatalf("Insert: %v", err)
 	}

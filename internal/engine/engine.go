@@ -61,14 +61,18 @@ func (d Datum) DeepCopy() Datum {
 	return Datum{Type: d.Type, Value: d.Value}
 }
 
-// Row is a slice of Datum values representing one result row.
-type Row []Datum
+// Row is a single tuple with an opaque RowID for physical mutation targeting.
+// RowID = physicalOffset + 1. Zero means "not from a heap scan" (ErrMissingRowID).
+type Row struct {
+	Datums []Datum
+	RowID  uint64 // physicalOffset+1; 0 = sentinel (not from heap scan)
+}
 
-// DeepCopy calls DeepCopy on every Datum.
+// DeepCopy calls DeepCopy on every Datum. RowID is copied by value.
 func (r Row) DeepCopy() Row {
-	cp := make(Row, len(r))
-	for i, d := range r {
-		cp[i] = d.DeepCopy()
+	cp := Row{RowID: r.RowID, Datums: make([]Datum, len(r.Datums))}
+	for i, d := range r.Datums {
+		cp.Datums[i] = d.DeepCopy()
 	}
 	return cp
 }

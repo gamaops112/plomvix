@@ -203,76 +203,75 @@ func buildRow(engSchema *engine.Schema, insertCols vitess.Columns, rowExprs vite
 	}
 
 	// Initialize with DEFAULT values or typed NULL.
-	mappedRow := make(engine.Row, len(engSchema.Columns))
+	mappedDatums := make([]engine.Datum, len(engSchema.Columns))
 	for i, col := range engSchema.Columns {
 		if col.DefaultValue != nil {
-			mappedRow[i] = col.DefaultValue.DeepCopy()
+			mappedDatums[i] = col.DefaultValue.DeepCopy()
 		} else {
-			mappedRow[i] = engine.Datum{Type: col.Type, Value: nil}
+			mappedDatums[i] = engine.Datum{Type: col.Type, Value: nil}
 		}
 	}
 
 	if len(insertCols) > 0 {
 		if len(insertCols) != len(rowExprs) {
-			return nil, ErrColumnCountMismatch
+			return engine.Row{}, ErrColumnCountMismatch
 		}
 		seen := make(map[string]bool)
 		for i, colIdent := range insertCols {
 			colName := strings.ToLower(colIdent.String())
 			if seen[colName] {
-				return nil, fmt.Errorf("%w: %q", ErrDuplicateColumn, colName)
+				return engine.Row{}, fmt.Errorf("%w: %q", ErrDuplicateColumn, colName)
 			}
 			seen[colName] = true
 			idx, ok := schemaIndexByName[colName]
 			if !ok {
-				return nil, fmt.Errorf("%w: %q", ErrUnknownColumn, colName)
+				return engine.Row{}, fmt.Errorf("%w: %q", ErrUnknownColumn, colName)
 			}
 			d, err := mapLiteral(rowExprs[i], engSchema.Columns[idx])
 			if err != nil {
-				return nil, err
+				return engine.Row{}, err
 			}
-			mappedRow[idx] = d
+			mappedDatums[idx] = d
 		}
 	} else {
 		if len(rowExprs) != len(engSchema.Columns) {
-			return nil, ErrColumnCountMismatch
+			return engine.Row{}, ErrColumnCountMismatch
 		}
 		for i, expr := range rowExprs {
 			d, err := mapLiteral(expr, engSchema.Columns[i])
 			if err != nil {
-				return nil, err
+				return engine.Row{}, err
 			}
-			mappedRow[i] = d
+			mappedDatums[i] = d
 		}
 	}
 
 	// NOT NULL enforcement.
 	for i, col := range engSchema.Columns {
-		if col.NotNull && mappedRow[i].Value == nil {
-			return nil, fmt.Errorf("%w: column %q", ErrNotNullViolation, col.Name)
+		if col.NotNull && mappedDatums[i].Value == nil {
+			return engine.Row{}, fmt.Errorf("%w: column %q", ErrNotNullViolation, col.Name)
 		}
 	}
 
-	return mappedRow, nil
+	return engine.Row{Datums: mappedDatums}, nil
 }
 
 // coerceRow converts a source row to the target schema, applying type coercion
 // and NOT NULL checks. Used for INSERT SELECT.
 func coerceRow(targetSchema *engine.Schema, srcRow engine.Row) (engine.Row, error) {
-	if len(srcRow) != len(targetSchema.Columns) {
-		// Pad or truncate? For simplicity, require exact match.
-		return nil, ErrColumnCountMismatch
+	if len(srcRow.Datums) != len(targetSchema.Columns) {
+		return engine.Row{}, ErrColumnCountMismatch
 	}
-	out := make(engine.Row, len(targetSchema.Columns))
+	out := engine.Row{Datums: make([]engine.Datum, len(targetSchema.Columns))}
 	for i, col := range targetSchema.Columns {
-		d, err := coerceDatum(srcRow[i], col)
+		d, err := coerceDatum(srcRow.Datums[i], col)
 		if err != nil {
-			return nil, err
+			return engine.Row{}, err
 		}
 		if col.NotNull && d.Value == nil {
-			return nil, fmt.Errorf("%w: column %q", ErrNotNullViolation, col.Name)
+			return engine.Row{}, fmt.Errorf("%w: column %q", ErrNotNullViolation, col.Name)
 		}
-		out[i] = d
+		out.Datums[i] = d
 	}
 	return out, nil
 }

@@ -28,8 +28,9 @@ type TableHeap interface {
 }
 
 // HeapScanIterator iterates over encoded tuples from a table heap.
+// Returns encodedTuple, rowID (physicalOffset+1), and error. Never emits rowID == 0.
 type HeapScanIterator interface {
-	Next(ctx context.Context) (encodedTuple []byte, err error)
+	Next(ctx context.Context) (encodedTuple []byte, rowID uint64, err error)
 	Close() error
 }
 
@@ -71,16 +72,17 @@ func (n *SeqScanNode) Open(ctx context.Context) error {
 
 func (n *SeqScanNode) Next(ctx context.Context) (engine.Row, error) {
 	if n.iter == nil {
-		return nil, io.EOF
+		return engine.Row{}, io.EOF
 	}
-	encoded, err := n.iter.Next(ctx)
+	encoded, rowID, err := n.iter.Next(ctx)
 	if err != nil {
-		return nil, err
+		return engine.Row{}, err
 	}
 	row, err := n.decoder.Decode(encoded, n.schema)
 	if err != nil {
-		return nil, err
+		return engine.Row{}, err
 	}
+	row.RowID = rowID
 	return row.DeepCopy(), nil
 }
 

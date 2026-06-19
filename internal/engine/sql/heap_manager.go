@@ -112,8 +112,8 @@ func (a *tableHeapAdapter) Scan(ctx context.Context, tx engine.TxContext) (plann
 
 // Insert satisfies InsertableTableHeap for DML execution.
 func (a *tableHeapAdapter) Insert(ctx context.Context, tx engine.TxContext, row engine.Row) error {
-	vals := make([]any, len(row))
-	for i, d := range row {
+	vals := make([]any, len(row.Datums))
+	for i, d := range row.Datums {
 		vals[i] = d.Value
 	}
 	return a.t.Insert(ctx, heap.Tx{ID: tx.WriteTxID}, vals)
@@ -130,8 +130,8 @@ func (a *tableHeapAdapter) InsertBatch(ctx context.Context, tx engine.TxContext,
 	}
 	heapTx := heap.Tx{ID: tx.WriteTxID}
 	for _, row := range rows {
-		vals := make([]any, len(row))
-		for i, d := range row {
+		vals := make([]any, len(row.Datums))
+		for i, d := range row.Datums {
 			vals[i] = d.Value
 		}
 		if err := a.t.Insert(ctx, heapTx, vals); err != nil {
@@ -162,8 +162,8 @@ type heapInsertStream struct {
 }
 
 func (s *heapInsertStream) Append(ctx context.Context, row engine.Row) error {
-	vals := make([]any, len(row))
-	for i, d := range row {
+	vals := make([]any, len(row.Datums))
+	for i, d := range row.Datums {
 		vals[i] = d.Value
 	}
 	return s.a.t.Insert(ctx, s.heapTx, vals)
@@ -187,18 +187,24 @@ var _ InsertableTableHeap = (*tableHeapAdapter)(nil)
 
 // rowsAdapter wraps heap.Rows to satisfy planner.HeapScanIterator.
 type rowsAdapter struct {
-	rows heap.Rows
+	rows    heap.Rows
+	counter uint64
 }
 
-func (r *rowsAdapter) Next(ctx context.Context) ([]byte, error) {
+func (r *rowsAdapter) Next(ctx context.Context) ([]byte, uint64, error) {
 	if !r.rows.Next() {
 		if err := r.rows.Err(); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return nil, io.EOF
+		return nil, 0, io.EOF
 	}
 	vals := r.rows.Values()
-	return encodeRowToBytes(vals)
+	// RowID = physicalOffset + 1. We use a synthetic counter since the heap
+	// doesn't expose physical offsets yet.
+	rowID := r.counter + 1
+	r.counter++
+	encoded, err := encodeRowToBytes(vals)
+	return encoded, rowID, err
 }
 
 func (r *rowsAdapter) Close() error { return r.rows.Close() }
@@ -229,15 +235,15 @@ func (d *sqlRowDecoder) Decode(encodedTuple []byte, schema engine.Schema) (engin
 	}
 	k, err := key.ParseStorageCompositeKey(encodedTuple, schemaColumnKinds(schema))
 	if err != nil {
-		return nil, fmt.Errorf("sql: decode row: %w", err)
+		return engine.Row{}, fmt.Errorf("sql: decode row: %w", err)
 	}
 	rawVals, err := key.DecodeStorageComposite(k)
 	if err != nil {
-		return nil, fmt.Errorf("sql: decode row: %w", err)
+		return engine.Row{}, fmt.Errorf("sql: decode row: %w", err)
 	}
-	row := make(engine.Row, len(rawVals))
+	row := engine.Row{Datums: make([]engine.Datum, len(rawVals))}
 	for i, v := range rawVals {
-		row[i] = keyValueToDatum(v, schema.Columns[i].Type)
+		row.Datums[i] = keyValueToDatum(v, schema.Columns[i].Type)
 	}
 	return row, nil
 }

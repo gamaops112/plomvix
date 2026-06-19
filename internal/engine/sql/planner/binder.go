@@ -18,10 +18,10 @@ type colRef struct {
 }
 
 func (c *colRef) Eval(row engine.Row) (engine.Datum, error) {
-	if c.idx >= len(row) {
+	if c.idx >= len(row.Datums) {
 		return engine.Datum{}, fmt.Errorf("planner: column index %d out of range", c.idx)
 	}
-	return row[c.idx], nil
+	return row.Datums[c.idx], nil
 }
 
 type literalExpr struct {

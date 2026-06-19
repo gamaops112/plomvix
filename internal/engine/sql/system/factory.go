@@ -92,10 +92,10 @@ type concreteSystemHeap struct {
 }
 
 func (c *concreteSystemHeap) Insert(ctx context.Context, tx engine.TxContext, row engine.Row) error {
-	if len(row) < 2 {
+	if len(row.Datums) < 2 {
 		return fmt.Errorf("system: insert requires at least 2 columns (key, value)")
 	}
-	k, err := rowToKey(row[0])
+	k, err := rowToKey(row.Datums[0])
 	if err != nil {
 		return err
 	}
@@ -125,11 +125,11 @@ func rowToKey(d engine.Datum) (key.Key, error) {
 
 // encodeSystemValue encodes [version(8)][value_bytes].
 func encodeSystemValue(version uint64, row engine.Row) []byte {
-	if len(row) < 2 {
+	if len(row.Datums) < 2 {
 		return nil
 	}
 	var valBytes []byte
-	switch v := row[1].Value.(type) {
+	switch v := row.Datums[1].Value.(type) {
 	case []byte:
 		valBytes = v
 	case string:
@@ -179,13 +179,13 @@ func (it *directIterator) Next(ctx context.Context) (engine.Row, error) {
 			continue
 		}
 		keyBytes := keyDecodeToBytes(e.Key)
-		row := engine.Row{
+		row := engine.Row{Datums: []engine.Datum{
 			{Type: engine.TypeBytes, Value: keyBytes},
 			{Type: engine.TypeBytes, Value: val},
-		}
+		}}
 		return row, nil
 	}
-	return nil, io.EOF
+	return engine.Row{}, io.EOF
 }
 
 func (it *directIterator) Close() error { return nil }
@@ -213,10 +213,10 @@ func NewSystemHeapAdapter(h SystemHeap) catalog.SystemTable {
 // Put stores a new MVCC version of the key-value pair.
 func (a *SystemHeapAdapter) Put(ctx context.Context, key, value []byte) error {
 	txID := a.nextTxID.Add(1)
-	row := engine.Row{
+	row := engine.Row{Datums: []engine.Datum{
 		{Type: engine.TypeBytes, Value: key},
 		{Type: engine.TypeBytes, Value: value},
-	}
+	}}
 	return a.heap.Insert(ctx, engine.TxContext{WriteTxID: txID}, row)
 }
 
@@ -235,17 +235,17 @@ func (a *SystemHeapAdapter) Get(ctx context.Context, key []byte) ([]byte, error)
 		if err != nil {
 			break
 		}
-		if len(row) < 2 {
+		if len(row.Datums) < 2 {
 			continue
 		}
-		rowKey, ok := row[0].Value.([]byte)
+		rowKey, ok := row.Datums[0].Value.([]byte)
 		if !ok || !bytes.Equal(rowKey, key) {
 			continue
 		}
 		found = true
-		if row[1].Value == nil {
+		if row.Datums[1].Value == nil {
 			latestValue = nil // tombstone (nil)
-		} else if b, ok := row[1].Value.([]byte); ok {
+		} else if b, ok := row.Datums[1].Value.([]byte); ok {
 			if len(b) == 0 {
 				latestValue = nil // tombstone (empty slice)
 			} else {
@@ -262,10 +262,10 @@ func (a *SystemHeapAdapter) Get(ctx context.Context, key []byte) ([]byte, error)
 // Delete tombstones a key by inserting an empty value (nil not supported by heap).
 func (a *SystemHeapAdapter) Delete(ctx context.Context, key []byte) error {
 	txID := a.nextTxID.Add(1)
-	row := engine.Row{
+	row := engine.Row{Datums: []engine.Datum{
 		{Type: engine.TypeBytes, Value: key},
 		{Type: engine.TypeBytes, Value: []byte{}}, // empty = tombstone
-	}
+	}}
 	return a.heap.Insert(ctx, engine.TxContext{WriteTxID: txID}, row)
 }
 
@@ -283,17 +283,17 @@ func (a *SystemHeapAdapter) Scan(ctx context.Context, fn func(k, v []byte) error
 		if err != nil {
 			break
 		}
-		if len(row) < 2 {
+		if len(row.Datums) < 2 {
 			continue
 		}
-		k, ok := row[0].Value.([]byte)
+		k, ok := row.Datums[0].Value.([]byte)
 		if !ok {
 			continue
 		}
 		ks := string(k)
-		if row[1].Value == nil {
+		if row.Datums[1].Value == nil {
 			latest[ks] = nil // tombstone
-		} else if v, ok := row[1].Value.([]byte); ok {
+		} else if v, ok := row.Datums[1].Value.([]byte); ok {
 			if len(v) == 0 {
 				latest[ks] = nil // tombstone (empty slice)
 			} else {
