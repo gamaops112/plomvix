@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/plomvix/plomvix/internal/engine"
 )
@@ -83,20 +85,27 @@ func GetPlannerSchema(op Operator) PlannerSchema {
 	return PlannerSchemaFromEngineSchema(op.Schema(), "")
 }
 
-// NestedLoopJoinNode performs a basic Nested Loop Join (inner join only).
+// NestedLoopJoinNode performs a Nested Loop Join (inner or left outer).
 type NestedLoopJoinNode struct {
 	left          Operator
 	right         Operator
 	cond          BoundExpr
+	isLeftJoin    bool
+	logger        *slog.Logger
 	plannerSchema PlannerSchema
 	outSchema     engine.Schema
 
-	leftRow engine.Row
+	leftRow     engine.Row
+	leftMatched bool
+
+	probeRows  int
+	outputRows int
+	probeTime  time.Duration
 }
 
-// NewNestedLoopJoinNode creates a NestedLoopJoinNode from left and right operators
-// and an optional join condition.
-func NewNestedLoopJoinNode(left, right Operator, cond BoundExpr) *NestedLoopJoinNode {
+// NewNestedLoopJoinNode creates a NestedLoopJoinNode from left and right operators,
+// an optional join condition, a left-join flag, and a logger.
+func NewNestedLoopJoinNode(left, right Operator, cond BoundExpr, isLeftJoin bool, logger *slog.Logger) *NestedLoopJoinNode {
 	leftPS := GetPlannerSchema(left)
 	rightPS := GetPlannerSchema(right)
 	fields := make([]SchemaField, 0, len(leftPS.Fields)+len(rightPS.Fields))
@@ -107,6 +116,8 @@ func NewNestedLoopJoinNode(left, right Operator, cond BoundExpr) *NestedLoopJoin
 		left:          left,
 		right:         right,
 		cond:          cond,
+		isLeftJoin:    isLeftJoin,
+		logger:        logger,
 		plannerSchema: plannerSchema,
 		outSchema:     plannerSchema.ToEngineSchema(),
 	}
@@ -122,6 +133,9 @@ func (n *NestedLoopJoinNode) Open(ctx context.Context) error {
 		_ = n.left.Close()
 		return err
 	}
+	n.probeRows = 0
+	n.outputRows = 0
+	n.probeTime = 0
 	lr, err := n.left.Next(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -132,11 +146,16 @@ func (n *NestedLoopJoinNode) Open(ctx context.Context) error {
 		_ = n.right.Close()
 		return err
 	}
-	n.leftRow = lr
+	n.leftRow = lr.DeepCopy()
+	n.leftMatched = false
+	n.probeRows++
 	return nil
 }
 
 func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
+	start := time.Now()
+	defer func() { n.probeTime += time.Since(start) }()
+
 	for {
 		if len(n.leftRow.Datums) == 0 {
 			return engine.Row{}, io.EOF
@@ -145,7 +164,29 @@ func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
 		rr, err := n.right.Next(ctx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				// Re-open inner relation for next outer row.
+				// LEFT JOIN null-padding: emit outer row with NULL right side.
+				if n.isLeftJoin && !n.leftMatched {
+					padded := nullPadRight(n.leftRow, n.right.Schema())
+					_ = n.right.Close()
+					if errR := n.right.Open(ctx); errR != nil {
+						return engine.Row{}, errR
+					}
+					lr, errA := n.left.Next(ctx)
+					if errA != nil {
+						n.leftRow = engine.Row{}
+						if errors.Is(errA, io.EOF) {
+							n.outputRows++
+							return padded, nil
+						}
+						return engine.Row{}, errA
+					}
+					n.leftRow = lr.DeepCopy()
+					n.leftMatched = false
+					n.probeRows++
+					n.outputRows++
+					return padded, nil
+				}
+				// Inner join: re-open inner, advance outer.
 				if err := n.right.Close(); err != nil {
 					return engine.Row{}, err
 				}
@@ -160,7 +201,9 @@ func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
 					}
 					return engine.Row{}, err
 				}
-				n.leftRow = lr
+				n.leftRow = lr.DeepCopy()
+				n.leftMatched = false
+				n.probeRows++
 				continue
 			}
 			return engine.Row{}, err
@@ -179,15 +222,28 @@ func (n *NestedLoopJoinNode) Next(ctx context.Context) (engine.Row, error) {
 				return engine.Row{}, err
 			}
 			if b, ok := d.Value.(bool); ok && b {
+				n.leftMatched = true
+				n.outputRows++
 				return joinedRow, nil
 			}
 			continue
 		}
+		n.leftMatched = true
+		n.outputRows++
 		return joinedRow, nil
 	}
 }
 
 func (n *NestedLoopJoinNode) Close() error {
+	if n.logger != nil {
+		n.logger.Info("joins: NestedLoopJoin metrics",
+			slog.String("join_algorithm", "nested_loop"),
+			slog.Bool("left_outer", n.isLeftJoin),
+			slog.Int("probe_rows", n.probeRows),
+			slog.Int("output_rows", n.outputRows),
+			slog.Duration("probe_time_ms", n.probeTime),
+		)
+	}
 	n.leftRow = engine.Row{}
 	errL := n.left.Close()
 	errR := n.right.Close()

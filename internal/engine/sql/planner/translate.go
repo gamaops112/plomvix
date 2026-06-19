@@ -152,7 +152,7 @@ func translateFrom(
 		if err != nil {
 			return nil, engine.Schema{}, err
 		}
-		left = NewNestedLoopJoinNode(left, right, nil)
+		left = NewNestedLoopJoinNode(left, right, nil, false, nil)
 	}
 	return left, GetPlannerSchema(left).ToEngineSchema(), nil
 }
@@ -218,6 +218,12 @@ func translateJoinTableExpr(
 	req *engine.Request,
 	jte *vitess.JoinTableExpr,
 ) (Operator, engine.Schema, error) {
+	// Reject RIGHT outer join.
+	if jte.Join == vitess.RightJoinType {
+		return nil, engine.Schema{}, ErrUnsupportedFeature
+	}
+	isLeftJoin := jte.Join == vitess.LeftJoinType
+
 	left, _, err := translateTableExpr(ctx, cat, tables, decoder, req, jte.LeftExpr)
 	if err != nil {
 		return nil, engine.Schema{}, err
@@ -240,6 +246,6 @@ func translateJoinTableExpr(
 		}
 	}
 
-	op := NewNestedLoopJoinNode(left, right, cond)
+	op := BuildJoin(ctx, cat, decoder, req, left, right, cond, jte.Condition.On, isLeftJoin, nil)
 	return op, GetPlannerSchema(op).ToEngineSchema(), nil
 }

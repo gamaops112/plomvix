@@ -71,7 +71,7 @@ func TestNestedLoopJoinNode_Schema(t *testing.T) {
 		{Name: "b", Type: engine.TypeString},
 	}}, alias: "t2"}
 
-	node := NewNestedLoopJoinNode(left, right, nil)
+	node := NewNestedLoopJoinNode(left, right, nil, false, nil)
 	schema := node.Schema()
 	if len(schema.Columns) != 2 {
 		t.Errorf("got %d columns, want 2", len(schema.Columns))
@@ -86,7 +86,7 @@ func TestNestedLoopJoinNode_OpenCloseCycle(t *testing.T) {
 		{Datums: []engine.Datum{{Type: engine.TypeString, Value: "x"}}},
 	}}
 
-	node := NewNestedLoopJoinNode(left, right, nil)
+	node := NewNestedLoopJoinNode(left, right, nil, false, nil)
 	ctx := context.Background()
 
 	if err := node.Open(ctx); err != nil {
@@ -125,7 +125,7 @@ func TestNestedLoopJoinNode_InnerRescan(t *testing.T) {
 		{Datums: []engine.Datum{{Type: engine.TypeString, Value: "x"}}},
 	}}
 
-	node := NewNestedLoopJoinNode(left, right, nil)
+	node := NewNestedLoopJoinNode(left, right, nil, false, nil)
 	ctx := context.Background()
 	_ = node.Open(ctx)
 	defer node.Close()
@@ -156,7 +156,7 @@ func TestNestedLoopJoinNode_WithCondition(t *testing.T) {
 
 	// Condition: left[0] == right[0]
 	cond := &eqJoinCond{leftIdx: 0, rightIdx: 1}
-	node := NewNestedLoopJoinNode(left, right, cond)
+	node := NewNestedLoopJoinNode(left, right, cond, false, nil)
 	ctx := context.Background()
 	_ = node.Open(ctx)
 	defer node.Close()
