@@ -17,12 +17,12 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 | **3. Control Plane & Read** | 22 - 23 | Global Catalog & IAM | `internal/catalog` | ✅ **Done** | System tables, RBAC, Meta-first Tx. |
 | | 24 - 25 | Global SQL Parser | `internal/sqlparser` | ✅ **Done** | Vitess wrapper, fingerprinting, normalization. |
 | | 26a - 26b | Router & Planner (Setup + Enterprise) | `internal/router`, `.../planner` | ✅ **Done** | Volcano model, Plan Cache, Schema Pinning. |
-| **4. The Write Path**<br>*(Immediate Next)* | 27 | **DDL Execution** (`CREATE` / `DROP`) | `internal/engine/sql/exec` | ✅ **Done** | Unblocks schema creation. Writes to Catalog. |
-| | 28 | **DML Execution** (`INSERT` / `UPDATE` / `DELETE`) | `internal/engine/sql/exec` | ✅ **Ready for Coding** | Unblocks data insertion. Uses MVCC timestamps. |
-| **5. Advanced Execution** | 29 | Joins & Multi-Table Execution | `.../planner`, `.../exec` | ✅ **Ready for Coding** | Nested Loop & Hash Joins. |
+| **4. The Write Path** | 27 | **DDL Execution** (`CREATE` / `DROP`) | `internal/engine/sql/exec` | ✅ **Done** | Unblocks schema creation. Writes to Catalog. |
+| | 28 | **DML Execution** (`INSERT` / `UPDATE` / `DELETE`) | `internal/engine/sql/exec` | ✅ **Done** | Unblocks data insertion. Uses MVCC timestamps. |
+| **5. Advanced Execution** | 29 | Joins & Multi-Table Execution | `.../planner`, `.../exec` | ✅ **Done** | Nested Loop & Hash Joins. |
 | | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Done** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
-| **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | ✅ **Ready for Coding** | PostgreSQL Wire Protocol v3.0 (Simple & Extended). |
-| | 32 | System Composition & Configuration Wiring | `internal/config`, `.../runtime` | ✅ **Ready for Coding** | Compiles all components with lifecycle hooks. |
+| **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | ✅ **Done** | PostgreSQL Wire Protocol v3.0 (Simple & Extended). |
+| | 32 | System Composition & Configuration Wiring | `internal/config`, `.../runtime` | ✅ **Done** | Compiles all components with lifecycle hooks. |
 
 ***
 
@@ -37,5 +37,6 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 
 ***
 
-### 🎯 Immediate Action Items
-1. **Execute Plans 28, 29, 31, & 32 (DML, Joins, Wire Protocol, & Wiring):** Hand the approved plans to the coding agent to implement the core database layers and daemon entrypoints.
+### 🎯 Immediate Action Items & Future Milestones
+1. **🎉 Milestone Achieved:** The core relational SQL Engine is fully implemented, wired, and verified with custom storage and network protocol layers.
+2. **Future Pluggable Engines:** Design and implement pluggable Metrics and Logs engines leveraging the core runtime and storage interfaces established in this milestone.

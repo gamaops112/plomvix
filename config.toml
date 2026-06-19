@@ -1,9 +1,13 @@
+# Plomvix runtime configuration
+
 [server]
 host = "127.0.0.1"
-port = 8080
-
-[data]
-path = "./data"
+port = 5432
+max_connections = 100
+ssl_enabled = false
+# ssl_cert_path = ""
+# ssl_key_path = ""
+auth_type = "trust"
 
 [logger]
 level = "info"
@@ -12,7 +16,13 @@ output = "stdout"
 
 [sql_engine]
 data_dir = "data/sql"
-backend  = "bbolt"
+max_mutation_rows = 1000
+vacuum_workers = 2
+vacuum_queue_size = 100
+
+[storage]
+db_path = "data/plomvix.db"
+wal_path = "data/plomvix.wal"
+cache_size_mb = 64
 sync_writes = true
-# cache_size_mb = 0
-# max_open_files = 0
+max_open_files = 256

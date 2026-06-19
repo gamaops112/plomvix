@@ -1,6 +1,7 @@
 // Package runtime composes Plomvix core foundations (config, logger, lifecycle)
-// into a minimal runnable entrypoint. It does not own database engines, storage,
-// WAL, query execution, API servers, or UI.
+// into a fully wired database daemon. It constructs the storage pager, KVStore,
+// catalog, SQL engine, router, parser, and PG wire protocol server, registers
+// them with the lifecycle manager, and starts them in dependency order.
 package runtime
 
 import (
@@ -8,11 +9,24 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/config"
+	"github.com/plomvix/plomvix/internal/engine/sql"
+	"github.com/plomvix/plomvix/internal/engine/sql/kv"
+	"github.com/plomvix/plomvix/internal/engine/sql/planner"
+	"github.com/plomvix/plomvix/internal/engine/sql/system"
+	"github.com/plomvix/plomvix/internal/engine/sql/tx"
+	"github.com/plomvix/plomvix/internal/engine/sql/vacuum"
 	"github.com/plomvix/plomvix/internal/lifecycle"
 	"github.com/plomvix/plomvix/internal/logger"
+	"github.com/plomvix/plomvix/internal/router"
+	srv "github.com/plomvix/plomvix/internal/server"
+	"github.com/plomvix/plomvix/internal/sqlparser"
+	"github.com/plomvix/plomvix/internal/storage/pager"
 )
 
 // DefaultConfigPath is the default configuration file path.
@@ -38,6 +52,7 @@ var (
 // Options controls runtime behavior.
 type Options struct {
 	ConfigPath      string
+	PortOverride    int // 0 = use config value; non-zero overrides cfg.Server.Port
 	StartupTimeout  time.Duration
 	ShutdownTimeout time.Duration
 }
@@ -79,8 +94,9 @@ type Runtime struct {
 	manager *lifecycle.Manager
 }
 
-// New creates a Runtime by loading configuration, creating a logger, and
-// initializing a lifecycle manager. It does not start the lifecycle.
+// New creates a Runtime by loading configuration, constructing all database
+// and network components, registering them with the lifecycle manager in
+// dependency order, but does NOT start anything.
 func New(opts Options) (*Runtime, error) {
 	resolved, err := resolveOptions(opts)
 	if err != nil {
@@ -92,23 +108,117 @@ func New(opts Options) (*Runtime, error) {
 		return nil, fmt.Errorf("%w: %w", ErrLoadConfig, err)
 	}
 
+	// Apply CLI port override.
+	if resolved.PortOverride != 0 {
+		cfg.Server.Port = resolved.PortOverride
+	}
+
 	baseLog, err := logger.New(cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrCreateLogger, err)
 	}
-
 	log := logger.WithComponent(baseLog, "runtime")
+
+	// Create boot context for system heaps initialization.
+	bootCtx, cancel := context.WithTimeout(context.Background(), resolved.StartupTimeout)
+	defer cancel()
+
+	// 1. Initialize System Heaps & Global Catalog.
+	if err := os.MkdirAll(cfg.SQL.DataDir, 0755); err != nil {
+		return nil, fmt.Errorf("runtime: create data dir: %w", err)
+	}
+	sysFactory := system.NewFactory(cfg.SQL.DataDir)
+	sysTables, sysColumns, sysUsers, err := sysFactory.OpenOrCreateSystemHeaps(bootCtx)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: init system heaps: %w", err)
+	}
+	cat := catalog.NewWithStores(sysTables, sysColumns, sysUsers)
+
+	// 2. Initialize Custom Pager & KVStore for User Tables.
+	if err := os.MkdirAll(filepath.Dir(cfg.Store.DBPath), 0755); err != nil {
+		return nil, fmt.Errorf("runtime: create data dir: %w", err)
+	}
+	sharedPager := pager.New(cfg.Store.DBPath)
+	sharedKV := kv.New(sharedPager)
+
+	// 3. Initialize HeapManager (TableRegistry), TxManager, Vacuum, and RowDecoder.
+	heapMgr := sql.NewHeapManager(sharedKV, cfg.SQL.DataDir)
+	txMgr := tx.NewManager(1, 1)
+	vacMgr, err := vacuum.NewManager(cfg.SQL.VacuumWorkers, cfg.SQL.VacuumQueueSize)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: create vacuum manager: %w", err)
+	}
+	planCache := planner.NewPlanCache(128)
+	rowDecoder := sql.NewRowDecoder()
+
+	// 4. Initialize SQL Engine & Register it with Catalog.
+	sqlEngine, err := sql.NewSQLEngine(sql.SQLEngineConfig{
+		Catalog:         cat,
+		Versions:        cat,
+		TableManager:    heapMgr,
+		Decoder:         rowDecoder,
+		PlanCache:       planCache,
+		TxManager:       txMgr,
+		VacuumManager:   vacMgr,
+		Logger:          logger.WithComponent(baseLog, "sql-engine"),
+		MaxBatchSize:    1000,
+		MaxMutationRows: cfg.SQL.MaxMutationRows,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("runtime: create sql engine: %w", err)
+	}
+	if err := cat.RegisterEngine(sqlEngine); err != nil {
+		return nil, fmt.Errorf("runtime: register sql engine: %w", err)
+	}
+
+	// 5. Initialize Router & SQL Parser.
+	routerService := router.New(cat)
+	routerService.RegisterEngine(sqlEngine)
+	parserService, err := sqlparser.New()
+	if err != nil {
+		return nil, fmt.Errorf("runtime: create parser: %w", err)
+	}
+
+	// 6. Initialize PG Wire Protocol Server.
+	pgServer := srv.New(srv.ServerConfig{
+		Addr:           fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		Router:         routerService,
+		Parser:         parserService,
+		Logger:         logger.WithComponent(baseLog, "pg-server"),
+		MaxConnections: cfg.Server.MaxConnections,
+	})
+
+	// 7. Register components with lifecycle manager in dependency order.
+	manager := lifecycle.NewManager()
+	// Storage layer (start first, stop last).
+	if err := manager.Register(&pagerComponent{p: sharedPager}); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(&kvComponent{store: sharedKV}); err != nil {
+		return nil, err
+	}
+	// Catalog (after storage, before engine).
+	if err := manager.Register(cat); err != nil {
+		return nil, err
+	}
+	// Vacuum manager.
+	if err := manager.Register(vacMgr); err != nil {
+		return nil, err
+	}
+	// PG wire server (last to start, first to stop).
+	if err := manager.Register(pgServer); err != nil {
+		return nil, err
+	}
 
 	return &Runtime{
 		opts:    resolved,
 		cfg:     cfg,
 		log:     log,
-		manager: lifecycle.NewManager(),
+		manager: manager,
 	}, nil
 }
 
-// Start begins the runtime lifecycle. It creates a context with the startup
-// timeout and starts the lifecycle manager.
+// Start begins the runtime lifecycle.
 func (r *Runtime) Start(ctx context.Context) (err error) {
 	defer recoverRuntimePanic("start", &err)
 
@@ -129,9 +239,7 @@ func (r *Runtime) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-// Stop ends the runtime lifecycle. It creates a context with the shutdown
-// timeout and stops the lifecycle manager. Stop is safe to call after a
-// failed start.
+// Stop ends the runtime lifecycle (LIFO stop order).
 func (r *Runtime) Stop(ctx context.Context) (err error) {
 	defer recoverRuntimePanic("stop", &err)
 
@@ -163,6 +271,24 @@ func (r *Runtime) State() lifecycle.State {
 	return r.manager.State()
 }
 
+// pagerComponent wraps pager.Pager for lifecycle management.
+type pagerComponent struct {
+	p pager.Pager
+}
+
+func (c *pagerComponent) Name() string                    { return "storage.pager" }
+func (c *pagerComponent) Start(ctx context.Context) error { return c.p.Open(ctx) }
+func (c *pagerComponent) Stop(ctx context.Context) error  { return c.p.Close(ctx) }
+
+// kvComponent wraps kv.KVStore for lifecycle management.
+type kvComponent struct {
+	store kv.KVStore
+}
+
+func (c *kvComponent) Name() string                    { return "storage.kv" }
+func (c *kvComponent) Start(ctx context.Context) error { return c.store.Open(ctx) }
+func (c *kvComponent) Stop(ctx context.Context) error  { return c.store.Close(ctx) }
+
 // recoverRuntimePanic recovers from panics and wraps them as ErrRuntimePanic.
 func recoverRuntimePanic(operation string, errp *error) {
 	if r := recover(); r != nil {
@@ -176,8 +302,7 @@ func recoverRuntimePanic(operation string, errp *error) {
 }
 
 // Run loads configuration, creates a logger and lifecycle manager, starts the
-// lifecycle, and then stops it before returning. No production components are
-// registered in this minimal composition.
+// lifecycle, and then stops it before returning.
 func Run(ctx context.Context, opts Options) (err error) {
 	defer recoverRuntimePanic("run", &err)
 

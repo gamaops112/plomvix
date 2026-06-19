@@ -110,8 +110,11 @@ func TestNewValidOptionsReturnsRuntime(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -162,8 +165,11 @@ func TestNewInvalidLoggerConfigReturnsLoadConfig(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "trace"
@@ -215,8 +221,11 @@ func TestRunValidConfig(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -269,8 +278,11 @@ func TestRunInvalidLoggerConfigReturnsError(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "trace"
@@ -297,8 +309,11 @@ func TestRunValidJSONLoggerConfig(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "debug"
@@ -321,8 +336,11 @@ func TestRunEmptyConfigPathUsesDefault(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -409,8 +427,11 @@ func TestRuntimeStateNewAfterConstruction(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -436,8 +457,11 @@ func TestRuntimeStartTransitionsToStarted(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -466,8 +490,11 @@ func TestRuntimeStopTransitionsToStopped(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -497,8 +524,11 @@ func TestRuntimeRepeatedStopReturnsNil(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "info"
@@ -583,8 +613,11 @@ func TestRunInvalidLoggerConfigMatchesErrLoadConfig(t *testing.T) {
 host = "127.0.0.1"
 port = 8080
 
-[data]
-path = "./data"
+[sql_engine]
+data_dir = "./data"
+
+[storage]
+db_path = "./data/plomvix.db"
 
 [logger]
 level = "trace"

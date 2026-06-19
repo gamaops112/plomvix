@@ -1,15 +1,47 @@
-[server]
-host = "127.0.0.1"
-port = 8080
+# Plomvix example configuration — copy to config.toml and adjust
 
-[data]
-path = "./data"
+[server]
+# Network bind address.
+host = "127.0.0.1"
+# PostgreSQL-compatible port (default: 5432).
+port = 5432
+# Maximum concurrent connections. 0 = unlimited.
+max_connections = 100
+# Enable SSL/TLS encryption.
+ssl_enabled = false
+# Path to PEM-encoded TLS certificate.
+# ssl_cert_path = "/etc/plomvix/cert.pem"
+# Path to private key for TLS certificate.
+# ssl_key_path = "/etc/plomvix/key.pem"
+# Authentication type: "trust", "md5", "scram-sha-256".
+auth_type = "trust"
 
 [logger]
+# Log level: debug, info, warn, error.
 level = "info"
+# Log format: text, json.
 format = "text"
+# Log output: stdout, stderr, or a file path.
 output = "stdout"
 
 [sql_engine]
+# Path to SQL engine data directory.
 data_dir = "data/sql"
-backend  = "bbolt"
+# Maximum rows affected per mutation (0 = default 1000, -1 = disabled).
+max_mutation_rows = 1000
+# Number of background vacuum workers.
+vacuum_workers = 2
+# Vacuum deletion queue size.
+vacuum_queue_size = 100
+
+[storage]
+# On-disk database file path.
+db_path = "data/plomvix.db"
+# Write-ahead log file path.
+wal_path = "data/plomvix.wal"
+# Page cache size in MB.
+cache_size_mb = 64
+# Sync writes to disk (set false for performance, true for safety).
+sync_writes = true
+# Maximum number of open file descriptors.
+max_open_files = 256

@@ -13,20 +13,20 @@ import (
 // Config is the top-level configuration structure.
 type Config struct {
 	Server ServerConfig `toml:"server"`
-	Data   DataConfig   `toml:"data"`
 	Logger LoggerConfig `toml:"logger"`
 	SQL    SQLConfig    `toml:"sql_engine"`
+	Store  StoreConfig  `toml:"storage"`
 }
 
 // ServerConfig holds network-related configuration.
 type ServerConfig struct {
-	Host string `toml:"host"`
-	Port int    `toml:"port"`
-}
-
-// DataConfig holds data storage configuration.
-type DataConfig struct {
-	Path string `toml:"path"`
+	Host           string `toml:"host"`
+	Port           int    `toml:"port"`
+	MaxConnections int64  `toml:"max_connections"`
+	SSLEnabled     bool   `toml:"ssl_enabled"`
+	SSLCertPath    string `toml:"ssl_cert_path"`
+	SSLKeyPath     string `toml:"ssl_key_path"`
+	AuthType       string `toml:"auth_type"`
 }
 
 // LoggerConfig holds logging configuration.
@@ -38,11 +38,18 @@ type LoggerConfig struct {
 
 // SQLConfig holds sql_engine configuration.
 type SQLConfig struct {
-	DataDir      string `toml:"data_dir"`
-	Backend      string `toml:"backend"`
-	SyncWrites   bool   `toml:"sync_writes"`
-	ReadOnly     bool   `toml:"read_only"`
+	DataDir         string `toml:"data_dir"`
+	MaxMutationRows int    `toml:"max_mutation_rows"`
+	VacuumWorkers   int    `toml:"vacuum_workers"`
+	VacuumQueueSize int    `toml:"vacuum_queue_size"`
+}
+
+// StoreConfig holds storage configuration.
+type StoreConfig struct {
+	DBPath       string `toml:"db_path"`
+	WALPath      string `toml:"wal_path"`
 	CacheSizeMB  int    `toml:"cache_size_mb"`
+	SyncWrites   bool   `toml:"sync_writes"`
 	MaxOpenFiles int    `toml:"max_open_files"`
 }
 
@@ -50,11 +57,10 @@ type SQLConfig struct {
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
-			Host: "127.0.0.1",
-			Port: 8080,
-		},
-		Data: DataConfig{
-			Path: "./data",
+			Host:           "127.0.0.1",
+			Port:           5432,
+			MaxConnections: 100,
+			AuthType:       "trust",
 		},
 		Logger: LoggerConfig{
 			Level:  "info",
@@ -62,9 +68,17 @@ func Default() Config {
 			Output: "stdout",
 		},
 		SQL: SQLConfig{
-			DataDir:    "data/sql",
-			Backend:    "bbolt",
-			SyncWrites: true,
+			DataDir:         "data/sql",
+			MaxMutationRows: 1000,
+			VacuumWorkers:   2,
+			VacuumQueueSize: 100,
+		},
+		Store: StoreConfig{
+			DBPath:       "data/plomvix.db",
+			WALPath:      "data/plomvix.wal",
+			CacheSizeMB:  64,
+			SyncWrites:   true,
+			MaxOpenFiles: 256,
 		},
 	}
 }
@@ -75,11 +89,8 @@ func Validate(cfg Config) error {
 	if cfg.Server.Host == "" {
 		return errors.New("server.host is required")
 	}
-	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
-		return fmt.Errorf("server.port must be between 1 and 65535")
-	}
-	if cfg.Data.Path == "" {
-		return errors.New("data.path is required")
+	if cfg.Server.Port < 0 || cfg.Server.Port > 65535 {
+		return fmt.Errorf("server.port must be between 0 and 65535")
 	}
 	if !validLoggerLevel(cfg.Logger.Level) {
 		return fmt.Errorf("logger.level must be one of: debug, info, warn, error")
@@ -93,14 +104,8 @@ func Validate(cfg Config) error {
 	if cfg.SQL.DataDir == "" {
 		return errors.New("sql_engine data_dir is required")
 	}
-	if cfg.SQL.Backend != "bbolt" && cfg.SQL.Backend != "pebble" {
-		return fmt.Errorf("sql_engine backend must be bbolt or pebble")
-	}
-	if cfg.SQL.CacheSizeMB < 0 {
-		return fmt.Errorf("sql_engine cache_size_mb must be >= 0")
-	}
-	if cfg.SQL.MaxOpenFiles < 0 {
-		return fmt.Errorf("sql_engine max_open_files must be >= 0")
+	if cfg.Store.DBPath == "" {
+		return errors.New("storage db_path is required")
 	}
 	return nil
 }
@@ -161,8 +166,16 @@ func Load(path string) (Config, error) {
 }
 
 // normalize returns a copy of cfg with paths cleaned via filepath.Clean.
-// It does not mutate the input.
+// Empty paths are preserved as empty (not turned into ".").
 func normalize(cfg Config) Config {
-	cfg.Data.Path = filepath.Clean(cfg.Data.Path)
+	if cfg.SQL.DataDir != "" {
+		cfg.SQL.DataDir = filepath.Clean(cfg.SQL.DataDir)
+	}
+	if cfg.Store.DBPath != "" {
+		cfg.Store.DBPath = filepath.Clean(cfg.Store.DBPath)
+	}
+	if cfg.Store.WALPath != "" {
+		cfg.Store.WALPath = filepath.Clean(cfg.Store.WALPath)
+	}
 	return cfg
 }

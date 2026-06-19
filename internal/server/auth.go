@@ -12,10 +12,10 @@ import (
 
 // SASLAuth constants
 const (
-	AuthSASL       uint32 = 10
+	AuthSASL         uint32 = 10
 	AuthSASLContinue uint32 = 11
-	AuthSASLFinal  uint32 = 12
-	SCRAMSHA256    string = "SCRAM-SHA-256"
+	AuthSASLFinal    uint32 = 12
+	SCRAMSHA256      string = "SCRAM-SHA-256"
 )
 
 // handleSASLAuth processes SASL authentication (simplified, trust-only).

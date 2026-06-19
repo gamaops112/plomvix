@@ -29,11 +29,11 @@ type ServerConfig struct {
 
 // Server is a PG Wire Protocol network server.
 type Server struct {
-	cfg     ServerConfig
-	ln      net.Listener
-	router  Router
-	parser  sqlparser.Parser
-	log     *slog.Logger
+	cfg      ServerConfig
+	ln       net.Listener
+	router   Router
+	parser   sqlparser.Parser
+	log      *slog.Logger
 	throttle *Throttle
 
 	mu     sync.Mutex

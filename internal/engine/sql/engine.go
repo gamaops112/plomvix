@@ -112,6 +112,13 @@ func NewSQLEngine(cfg SQLEngineConfig) (*SQLEngine, error) {
 // Name returns the engine identifier.
 func (e *SQLEngine) Name() string { return "sql" }
 
+// ValidateSchema implements catalog.Engine. It validates a JSON-encoded
+// table schema against the engine's column type system.
+func (e *SQLEngine) ValidateSchema(schemaJSON []byte) error {
+	_, err := schema.Decode(schemaJSON)
+	return err
+}
+
 // Execute dispatches based on statement type.
 // DML statements (INSERT, UPDATE, DELETE) are handled BEFORE the plan cache
 // lookup. DML never interacts with the plan cache — no Lookup(), no Store().
