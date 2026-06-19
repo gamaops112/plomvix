@@ -344,50 +344,89 @@ func TestConcurrent_CreateDrop(t *testing.T) {
 // --- Enterprise RBAC tests ---
 
 func TestCreateDropRole(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
-	if err := c.CreateRole(ctxBg(), "admin"); err != nil { t.Fatalf("CreateRole: %v", err) }
-	if err := c.CreateRole(ctxBg(), "admin"); err != ErrDuplicateRole { t.Errorf("got %v, want ErrDuplicateRole", err) }
-	if err := c.DropRole(ctxBg(), "admin"); err != nil { t.Fatalf("DropRole: %v", err) }
-	if err := c.DropRole(ctxBg(), "admin"); err != ErrRoleNotFound { t.Errorf("got %v, want ErrRoleNotFound", err) }
+	if err := c.CreateRole(ctxBg(), "admin"); err != nil {
+		t.Fatalf("CreateRole: %v", err)
+	}
+	if err := c.CreateRole(ctxBg(), "admin"); err != ErrDuplicateRole {
+		t.Errorf("got %v, want ErrDuplicateRole", err)
+	}
+	if err := c.DropRole(ctxBg(), "admin"); err != nil {
+		t.Fatalf("DropRole: %v", err)
+	}
+	if err := c.DropRole(ctxBg(), "admin"); err != ErrRoleNotFound {
+		t.Errorf("got %v, want ErrRoleNotFound", err)
+	}
 }
 
 func TestAssignRevokeRole(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateUser(ctxBg(), "alice", "pw", false)
 	c.CreateRole(ctxBg(), "viewer")
-	if err := c.AssignRole(ctxBg(), "alice", "viewer"); err != nil { t.Fatalf("AssignRole: %v", err) }
-	if err := c.AssignRole(ctxBg(), "alice", "viewer"); err != ErrDuplicateRoleAssignment { t.Errorf("got %v", err) }
-	if err := c.RevokeRole(ctxBg(), "alice", "viewer"); err != nil { t.Fatalf("RevokeRole: %v", err) }
-	if err := c.RevokeRole(ctxBg(), "alice", "viewer"); err != ErrRoleNotFound { t.Errorf("got %v", err) }
+	if err := c.AssignRole(ctxBg(), "alice", "viewer"); err != nil {
+		t.Fatalf("AssignRole: %v", err)
+	}
+	if err := c.AssignRole(ctxBg(), "alice", "viewer"); err != ErrDuplicateRoleAssignment {
+		t.Errorf("got %v", err)
+	}
+	if err := c.RevokeRole(ctxBg(), "alice", "viewer"); err != nil {
+		t.Fatalf("RevokeRole: %v", err)
+	}
+	if err := c.RevokeRole(ctxBg(), "alice", "viewer"); err != ErrRoleNotFound {
+		t.Errorf("got %v", err)
+	}
 }
 
 func TestGrantRevoke(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateTable(ctxBg(), "sql", "t1", []byte("{}"))
 	c.CreateRole(ctxBg(), "writer")
-	if err := c.Grant(ctxBg(), "writer", "t1", ActionWrite); err != nil { t.Fatalf("Grant: %v", err) }
-	if err := c.Grant(ctxBg(), "writer", "t1", ActionWrite); err != ErrDuplicateGrant { t.Errorf("got %v", err) }
-	if err := c.Revoke(ctxBg(), "writer", "t1", ActionWrite); err != nil { t.Fatalf("Revoke: %v", err) }
+	if err := c.Grant(ctxBg(), "writer", "t1", ActionWrite); err != nil {
+		t.Fatalf("Grant: %v", err)
+	}
+	if err := c.Grant(ctxBg(), "writer", "t1", ActionWrite); err != ErrDuplicateGrant {
+		t.Errorf("got %v", err)
+	}
+	if err := c.Revoke(ctxBg(), "writer", "t1", ActionWrite); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
 }
 
 func TestCheckPermission_Admin(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateUser(ctxBg(), "admin", "pw", true)
 	ok, err := c.CheckPermission(ctxBg(), 1, 100, ActionDDL)
-	if err != nil || !ok { t.Errorf("admin should have permission: %v/%v", ok, err) }
+	if err != nil || !ok {
+		t.Errorf("admin should have permission: %v/%v", ok, err)
+	}
 }
 
 func TestCheckPermission_Orphaned(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateUser(ctxBg(), "alice", "pw", false)
 	c.CreateRole(ctxBg(), "temp")
@@ -395,8 +434,12 @@ func TestCheckPermission_Orphaned(t *testing.T) {
 	c.DropRole(ctxBg(), "temp")
 	// Orphaned role — should not panic, just return false.
 	ok, err := c.CheckPermission(ctxBg(), 1, 100, ActionRead)
-	if err != nil { t.Fatalf("CheckPermission: %v", err) }
-	if ok { t.Error("orphaned role should not grant permission") }
+	if err != nil {
+		t.Fatalf("CheckPermission: %v", err)
+	}
+	if ok {
+		t.Error("orphaned role should not grant permission")
+	}
 }
 
 func TestGetSchemaHistory(t *testing.T) {
@@ -404,25 +447,40 @@ func TestGetSchemaHistory(t *testing.T) {
 }
 
 func TestGrant_Global(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateRole(ctxBg(), "global_reader")
-	if err := c.Grant(ctxBg(), "global_reader", "", ActionRead); err != nil { t.Fatalf("Grant global: %v", err) }
+	if err := c.Grant(ctxBg(), "global_reader", "", ActionRead); err != nil {
+		t.Fatalf("Grant global: %v", err)
+	}
 }
 
 func TestInvalidAction(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateRole(ctxBg(), "r1")
-	if err := c.Grant(ctxBg(), "r1", "t1", Action("INVALID")); err != ErrInvalidAction { t.Errorf("got %v", err) }
-	if _, err := c.CheckPermission(ctxBg(), 1, 1, Action("INVALID")); err != ErrInvalidAction { t.Errorf("got %v", err) }
+	if err := c.Grant(ctxBg(), "r1", "t1", Action("INVALID")); err != ErrInvalidAction {
+		t.Errorf("got %v", err)
+	}
+	if _, err := c.CheckPermission(ctxBg(), 1, 1, Action("INVALID")); err != ErrInvalidAction {
+		t.Errorf("got %v", err)
+	}
 }
 
 func TestConcurrent_TxIDMonotonic(t *testing.T) {
-	c, cleanup := newTestCatalog(t); defer cleanup()
-	c.RegisterEngine(testEngine{"sql"}); c.Start(ctxBg()); defer c.Stop(ctxBg())
+	c, cleanup := newTestCatalog(t)
+	defer cleanup()
+	c.RegisterEngine(testEngine{"sql"})
+	c.Start(ctxBg())
+	defer c.Stop(ctxBg())
 
 	c.CreateRole(ctxBg(), "r1")
 	c.CreateTable(ctxBg(), "sql", fmt.Sprintf("t%d", 0), []byte("{}"))

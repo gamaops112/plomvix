@@ -34,10 +34,10 @@ type cache struct {
 	// Enterprise RBAC maps.
 	roles               map[string]RoleInfo
 	rolesByID           map[uint64]RoleInfo
-	grants              map[uint64][]GrantInfo       // roleID -> grants
-	grantsByKey         map[grantKey]GrantInfo        // key -> grant (for lookup)
-	userRoles           map[uint64][]uint64            // userID -> roleIDs
-	userRoleAssignments map[userRoleKey]uint64         // {userID,roleID} -> user_role_id
+	grants              map[uint64][]GrantInfo // roleID -> grants
+	grantsByKey         map[grantKey]GrantInfo // key -> grant (for lookup)
+	userRoles           map[uint64][]uint64    // userID -> roleIDs
+	userRoleAssignments map[userRoleKey]uint64 // {userID,roleID} -> user_role_id
 	nextRoleID          uint64
 	nextGrantID         uint64
 	nextUserRoleID      uint64
@@ -246,4 +246,3 @@ func (c *catalog) loadCache(ctx context.Context) (*cache, error) {
 
 	return cc, nil
 }
-

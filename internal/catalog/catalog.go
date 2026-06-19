@@ -209,25 +209,25 @@ type Catalog interface {
 
 // Sentinel errors.
 var (
-	ErrEngineNotFound        = errors.New("catalog: engine not registered")
-	ErrDuplicateEngine       = errors.New("catalog: engine already registered")
-	ErrInvalidEngine         = errors.New("catalog: invalid engine (nil or empty name)")
-	ErrTableNotFound         = errors.New("catalog: table not found")
-	ErrDuplicateTable        = errors.New("catalog: table name already exists")
-	ErrDuplicateUser         = errors.New("catalog: username already exists")
-	ErrInvalidSchema         = errors.New("catalog: engine rejected schema payload")
-	ErrAuthFailed            = errors.New("catalog: authentication failed")
-	ErrCatalogNotStarted     = errors.New("catalog: not started")
-	ErrCatalogAlreadyStarted = errors.New("catalog: already started or starting")
-	ErrEmptyName             = errors.New("catalog: name cannot be empty")
-	ErrConflict              = errors.New("catalog: concurrent operation conflict")
-	ErrRoleNotFound          = errors.New("catalog: role not found")
-	ErrDuplicateRole         = errors.New("catalog: role name already exists")
-	ErrPermissionDenied      = errors.New("catalog: permission denied")
-	ErrInvalidAction         = errors.New("catalog: invalid RBAC action")
+	ErrEngineNotFound          = errors.New("catalog: engine not registered")
+	ErrDuplicateEngine         = errors.New("catalog: engine already registered")
+	ErrInvalidEngine           = errors.New("catalog: invalid engine (nil or empty name)")
+	ErrTableNotFound           = errors.New("catalog: table not found")
+	ErrDuplicateTable          = errors.New("catalog: table name already exists")
+	ErrDuplicateUser           = errors.New("catalog: username already exists")
+	ErrInvalidSchema           = errors.New("catalog: engine rejected schema payload")
+	ErrAuthFailed              = errors.New("catalog: authentication failed")
+	ErrCatalogNotStarted       = errors.New("catalog: not started")
+	ErrCatalogAlreadyStarted   = errors.New("catalog: already started or starting")
+	ErrEmptyName               = errors.New("catalog: name cannot be empty")
+	ErrConflict                = errors.New("catalog: concurrent operation conflict")
+	ErrRoleNotFound            = errors.New("catalog: role not found")
+	ErrDuplicateRole           = errors.New("catalog: role name already exists")
+	ErrPermissionDenied        = errors.New("catalog: permission denied")
+	ErrInvalidAction           = errors.New("catalog: invalid RBAC action")
 	ErrDuplicateRoleAssignment = errors.New("catalog: user already has this role")
-	ErrDuplicateGrant        = errors.New("catalog: grant already exists")
-	ErrGrantNotFound         = errors.New("catalog: grant not found")
+	ErrDuplicateGrant          = errors.New("catalog: grant already exists")
+	ErrGrantNotFound           = errors.New("catalog: grant not found")
 )
 
 // catalog is the concrete implementation.
@@ -242,14 +242,14 @@ type catalog struct {
 
 	nextTxID uint64
 
-	tablesHandle  heap.Table
-	usersHandle   heap.Table
-	metaHandle    heap.Table
-	rolesHandle   heap.Table
-	grantsHandle  heap.Table
+	tablesHandle    heap.Table
+	usersHandle     heap.Table
+	metaHandle      heap.Table
+	rolesHandle     heap.Table
+	grantsHandle    heap.Table
 	userRolesHandle heap.Table
-	historyHandle heap.Table
-	auditHandle   heap.Table
+	historyHandle   heap.Table
+	auditHandle     heap.Table
 }
 
 // New creates a new Catalog backed by the given Heap.
@@ -336,4 +336,3 @@ func verifyPassword(hash []byte, password string) bool {
 
 // compile-time check
 var _ Catalog = (*catalog)(nil)
-
