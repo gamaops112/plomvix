@@ -13,6 +13,7 @@ import (
 	"github.com/plomvix/plomvix/internal/engine/sql/kv"
 	"github.com/plomvix/plomvix/internal/engine/sql/planner"
 	"github.com/plomvix/plomvix/internal/engine/sql/tx"
+	"github.com/plomvix/plomvix/internal/engine/sql/vacuum"
 	"github.com/plomvix/plomvix/internal/sqlparser"
 	"github.com/plomvix/plomvix/internal/storage/pager"
 )
@@ -50,12 +51,19 @@ func newTestSQLEngine(t *testing.T) (*SQLEngine, Catalog, catalog.UserInfo, func
 	if err != nil {
 		t.Fatalf("Authenticate admin: %v", err)
 	}
-	tm := NewHeapManager(store)
+	tm := NewHeapManager(store, dir)
 	txm := tx.NewManager(1, 1)
+	vac, err := vacuum.NewManager(2, 100)
+	if err != nil {
+		t.Fatalf("vacuum.NewManager: %v", err)
+	}
+	if err := vac.Start(ctx); err != nil {
+		t.Fatalf("vac.Start: %v", err)
+	}
 	dec := NewRowDecoder()
 	pc := planner.NewPlanCache(16)
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	eng, err := NewSQLEngine(cat, cat, tm, dec, pc, txm, log)
+	eng, err := NewSQLEngine(cat, cat, tm, dec, pc, txm, vac, log)
 	if err != nil {
 		t.Fatalf("NewSQLEngine: %v", err)
 	}
@@ -280,12 +288,17 @@ func TestDDL_PermissionDenied(t *testing.T) {
 		t.Fatalf("Authenticate: %v", err)
 	}
 
-	tm := NewHeapManager(store)
+	tm := NewHeapManager(store, dir)
 	txm := tx.NewManager(1, 1)
+	vac, err := vacuum.NewManager(2, 100)
+	if err != nil {
+		t.Fatalf("vacuum.NewManager: %v", err)
+	}
+	_ = vac.Start(ctx)
 	dec := NewRowDecoder()
 	pc := planner.NewPlanCache(16)
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	eng, err := NewSQLEngine(cat, cat, tm, dec, pc, txm, log)
+	eng, err := NewSQLEngine(cat, cat, tm, dec, pc, txm, vac, log)
 	if err != nil {
 		t.Fatalf("NewSQLEngine: %v", err)
 	}

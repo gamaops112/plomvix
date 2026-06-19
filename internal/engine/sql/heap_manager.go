@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/plomvix/plomvix/internal/engine"
@@ -20,21 +22,27 @@ import (
 // new physical heaps at runtime (DDL).
 type TableManager interface {
 	planner.TableRegistry
-	CreateTableHeap(ctx context.Context, tableID uint64, schema heap.Schema) error
+	// CreateTableHeap initializes a physical heap for the given table ID.
+	// Returns the planner.TableHeap and the deterministic file path.
+	CreateTableHeap(ctx context.Context, tableID uint64, schema heap.Schema) (planner.TableHeap, string, error)
+	// HeapPath returns the deterministic file path for a table ID.
+	HeapPath(tableID uint64) string
 }
 
 // heapManager implements TableManager backed by an on-disk KVStore.
 type heapManager struct {
-	mu     sync.RWMutex
-	store  kv.KVStore
-	heaps  map[uint64]heap.Table
+	mu      sync.RWMutex
+	store   kv.KVStore
+	dataDir string
+	heaps   map[uint64]heap.Table
 }
 
 // NewHeapManager creates a new TableManager.
-func NewHeapManager(store kv.KVStore) TableManager {
+func NewHeapManager(store kv.KVStore, dataDir string) TableManager {
 	return &heapManager{
-		store: store,
-		heaps: make(map[uint64]heap.Table),
+		store:   store,
+		dataDir: dataDir,
+		heaps:   make(map[uint64]heap.Table),
 	}
 }
 
@@ -50,20 +58,37 @@ func (m *heapManager) GetTableHeap(tableID uint64) (planner.TableHeap, error) {
 }
 
 // CreateTableHeap validates the schema and opens a new physical heap table.
-func (m *heapManager) CreateTableHeap(ctx context.Context, tableID uint64, schema heap.Schema) error {
+// Returns the TableHeap and the deterministic file path for cleanup.
+func (m *heapManager) CreateTableHeap(ctx context.Context, tableID uint64, schema heap.Schema) (planner.TableHeap, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.heaps[tableID]; exists {
-		return ErrTableExists
+		return nil, "", ErrTableExists
 	}
 	h := heap.New(m.store)
 	schema.TableID = tableID
 	t, err := h.OpenTable(schema)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	m.heaps[tableID] = t
-	return nil
+	path := m.heapPath(tableID)
+	return &tableHeapAdapter{t: t}, path, nil
+}
+
+// HeapPath returns the deterministic file path for a table ID.
+func (m *heapManager) HeapPath(tableID uint64) string {
+	return m.heapPath(tableID)
+}
+
+// heapPath returns the deterministic file path for a table heap.
+func (m *heapManager) heapPath(tableID uint64) string {
+	return filepath.Join(m.dataDir, fmt.Sprintf("heap_%d.db", tableID))
+}
+
+// RemoveHeap physically deletes a heap file. Used for transactional cleanup.
+func (m *heapManager) RemoveHeap(tableID uint64) error {
+	return os.Remove(m.heapPath(tableID))
 }
 
 // tableHeapAdapter wraps a heap.Table to satisfy planner.TableHeap.

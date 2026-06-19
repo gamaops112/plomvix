@@ -104,6 +104,12 @@ func copySchemaHistoryEntry(e SchemaHistoryEntry) SchemaHistoryEntry {
 func (c *catalog) loadCache(ctx context.Context) (*cache, error) {
 	cc := newCache()
 
+	// When using NewWithStores, system tables are already open via
+	// the factory. The cache starts empty and is populated on demand.
+	if c.tablesHandle == nil {
+		return cc, nil
+	}
+
 	maxTx := heap.Tx{ID: math.MaxUint64}
 
 	vals, err := c.metaHandle.Get(ctx, maxTx, []any{MetaKeyNextTxID})

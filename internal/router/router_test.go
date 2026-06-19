@@ -28,6 +28,7 @@ type mockCatalog struct {
 
 func (m *mockCatalog) Start(ctx context.Context) error       { return nil }
 func (m *mockCatalog) Stop(ctx context.Context) error        { return nil }
+func (m *mockCatalog) Name() string                          { return "mock" }
 func (m *mockCatalog) RegisterEngine(e catalog.Engine) error { return nil }
 func (m *mockCatalog) CreateTable(ctx context.Context, eng, name string, schema []byte) error {
 	return nil

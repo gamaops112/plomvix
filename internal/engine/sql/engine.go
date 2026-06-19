@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/plomvix/plomvix/internal/catalog"
@@ -18,6 +19,7 @@ import (
 	"github.com/plomvix/plomvix/internal/engine/sql/planner"
 	"github.com/plomvix/plomvix/internal/engine/sql/schema"
 	"github.com/plomvix/plomvix/internal/engine/sql/tx"
+	"github.com/plomvix/plomvix/internal/engine/sql/vacuum"
 	"github.com/plomvix/plomvix/internal/sqlparser"
 
 	vitess "vitess.io/vitess/go/vt/sqlparser"
@@ -29,10 +31,11 @@ var (
 	ErrNilPlanCache             = errors.New("sql engine: nil plan cache")
 	ErrNilLogger                = errors.New("sql engine: nil logger")
 	ErrNilTxManager             = errors.New("sql engine: nil tx manager")
+	ErrNilVacuumManager         = errors.New("sql engine: nil vacuum manager")
 	ErrTableExists              = errors.New("sql engine: table already exists")
 	ErrEmptySchema              = errors.New("sql engine: empty schema (zero columns)")
-	ErrUnsupportedDDL            = errors.New("sql engine: unsupported DDL operation")
-	ErrUnsupportedFeature        = errors.New("sql engine: unsupported SQL feature in basic tier")
+	ErrUnsupportedDDL           = errors.New("sql engine: unsupported DDL operation")
+	ErrUnsupportedFeature       = errors.New("sql engine: unsupported SQL feature in basic tier")
 )
 
 // SQLEngine implements engine.Engine for SQL queries and DDL.
@@ -43,6 +46,7 @@ type SQLEngine struct {
 	decoder  planner.RowDecoder
 	cache    *planner.PlanCache
 	txm      *tx.Manager
+	vacuum   *vacuum.Manager
 	log      *slog.Logger
 }
 
@@ -54,6 +58,7 @@ func NewSQLEngine(
 	decoder planner.RowDecoder,
 	cache *planner.PlanCache,
 	txm *tx.Manager,
+	vac *vacuum.Manager,
 	log *slog.Logger,
 ) (*SQLEngine, error) {
 	if versions == nil {
@@ -68,6 +73,9 @@ func NewSQLEngine(
 	if txm == nil {
 		return nil, ErrNilTxManager
 	}
+	if vac == nil {
+		return nil, ErrNilVacuumManager
+	}
 	return &SQLEngine{
 		catalog:  cat,
 		versions: versions,
@@ -75,6 +83,7 @@ func NewSQLEngine(
 		decoder:  decoder,
 		cache:    cache,
 		txm:      txm,
+		vacuum:   vac,
 		log:      log,
 	}, nil
 }
@@ -199,13 +208,16 @@ func (e *SQLEngine) executeCreateTable(ctx context.Context, req *engine.Request,
 		return nil, err
 	}
 
-	// Initialize physical heap.
-	if err := e.tables.CreateTableHeap(ctx, tableID, schema); err != nil {
+	// Initialize physical heap; get the file path for potential cleanup.
+	_, heapPath, err := e.tables.CreateTableHeap(ctx, tableID, schema)
+	if err != nil {
 		return nil, fmt.Errorf("sql engine: create heap: %w", err)
 	}
 
 	// Register in catalog (only after heap succeeds).
 	if err := e.catalog.RegisterTable(ctx, tableID, e.Name(), tableName, schemaPayload); err != nil {
+		// Transactional cleanup: remove orphaned heap file.
+		_ = os.Remove(heapPath)
 		return nil, fmt.Errorf("sql engine: register table: %w", err)
 	}
 
@@ -235,9 +247,19 @@ func (e *SQLEngine) executeDropTable(ctx context.Context, req *engine.Request, d
 		return nil, ErrUnsupportedFeature
 	}
 
+	// Look up the table info to get the TableID before dropping.
+	info, err := e.catalog.GetTable(ctx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := e.catalog.DropTable(ctx, tableName); err != nil {
 		return nil, err
 	}
+
+	// Schedule physical file deletion via vacuum manager (non-blocking).
+	heapPath := e.tables.HeapPath(info.TableID)
+	_ = e.vacuum.ScheduleDeletion(info.TableID, heapPath)
 
 	return &engine.Result{
 		Message: fmt.Sprintf("DROP TABLE %s", tableName),

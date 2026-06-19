@@ -9,8 +9,15 @@ import (
 )
 
 // bootstrap initializes the system tables and meta on a fresh Heap.
-// Must be called without holding mu.
+// When using NewWithStores, the system tables are already open; this
+// is a no-op.
 func (c *catalog) bootstrap(ctx context.Context) error {
+	// If using SystemTable adapters (NewWithStores), the factory already
+	// opened the physical files. Just return.
+	if c.h == nil {
+		return nil
+	}
+
 	var err error
 
 	c.tablesHandle, err = c.h.OpenTable(schemaTables)

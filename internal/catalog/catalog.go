@@ -183,6 +183,8 @@ type SchemaHistoryEntry struct {
 
 // Catalog is the global system catalog interface.
 type Catalog interface {
+	// Name returns the component name for lifecycle management.
+	Name() string
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 	RegisterEngine(e Engine) error
@@ -243,6 +245,11 @@ type catalog struct {
 	mu      sync.RWMutex
 	engines map[string]Engine
 
+	// SystemTable adapters (when constructed via NewWithStores).
+	sysTables  SystemTable
+	sysColumns SystemTable
+	sysUsers   SystemTable
+
 	started  bool
 	starting bool
 	cache    *cache
@@ -268,6 +275,21 @@ func New(h *heap.Heap) Catalog {
 		engines: make(map[string]Engine),
 	}
 }
+
+// NewWithStores creates a Catalog backed by SystemTable adapters. This
+// constructor decouples the catalog from concrete heap implementations
+// and is the preferred path for production wiring.
+func NewWithStores(tables, columns, users SystemTable) Catalog {
+	return &catalog{
+		sysTables:  tables,
+		sysColumns: columns,
+		sysUsers:   users,
+		engines:    make(map[string]Engine),
+	}
+}
+
+// Name returns the component name for lifecycle.Manager.
+func (c *catalog) Name() string { return "catalog" }
 
 // reserveTx increments nextTxID immediately under lock and returns the new value.
 // Must be called while holding c.mu (Write Lock).
