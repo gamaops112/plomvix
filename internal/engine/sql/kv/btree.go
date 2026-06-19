@@ -448,7 +448,7 @@ func (s *btreeStore) upperBoundIdx(childPtrs []uint64, ikeys []key.Key, k key.Ke
 // for large values.
 func (s *btreeStore) updateLeaf(ctx context.Context, pageID uint64,
 	keys []key.Key, vals [][]byte, pos int,
-	k key.Key, packedVal []byte, overflowIDs []uint64, nextLeaf uint64) error {
+	_ key.Key, packedVal []byte, overflowIDs []uint64, nextLeaf uint64) error {
 
 	vals[pos] = packedVal
 	body, err := encodeLeafNode(keys, vals, nextLeaf)
@@ -1206,10 +1206,8 @@ func (s *btreeStore) Compact(ctx context.Context) error {
 
 			// Build child pointers and separator keys.
 			childPtrs := make([]uint64, len(children))
+			copy(childPtrs, children)
 			sepKeys := make([]key.Key, len(children)-1)
-			for j := 0; j < len(children); j++ {
-				childPtrs[j] = children[j]
-			}
 			for j := 0; j < len(children)-1; j++ {
 				firstIdx := start + (j+1)*MaxLeafKeys
 				if firstIdx >= len(entries) {

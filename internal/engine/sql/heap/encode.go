@@ -384,40 +384,4 @@ func valueEqual(a, b any) bool {
 	return false
 }
 
-// encodeRowValue encodes a full row into storage-composite format.
-func encodeRowValue(schema Schema, values []any) ([]byte, error) {
-	if len(values) != len(schema.Columns) {
-		return nil, ErrColumnCountMismatch
-	}
-
-	primitives := make([]any, len(values))
-	for i, v := range values {
-		p, err := anyToPrimitive(schema.Columns[i].Kind, v)
-		if err != nil {
-			return nil, err
-		}
-		primitives[i] = p
-	}
-
-	storageKey, err := key.EncodeStorageComposite(primitives...)
-	if err != nil {
-		return nil, err
-	}
-
-	return storageKey.Bytes(), nil
-}
-
-// decodeRowValue decodes a storage-composite-encoded row back into []any.
-func decodeRowValue(schema Schema, data []byte) ([]any, error) {
-	kinds := make([]key.Kind, len(schema.Columns))
-	for i, col := range schema.Columns {
-		kinds[i] = col.Kind
-	}
-
-	k, err := key.ParseStorageCompositeKey(data, kinds)
-	if err != nil {
-		return nil, fmt.Errorf("heap: %w", key.ErrInvalidKey)
-	}
-
-	return key.DecodeStorageComposite(k)
-}
+// --- Enterprise encode/decode (used by all tiers) ---

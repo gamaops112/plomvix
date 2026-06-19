@@ -415,7 +415,7 @@ func (p *filePager) checkpoint() error {
 
 // replayWALInternal implements the shared logic for WAL replay and checkpoint.
 // If isCheckpoint is true, missing WAL file is not an error (just return nil).
-func (p *filePager) replayWALInternal(isCheckpoint bool) error {
+func (p *filePager) replayWALInternal(_ bool) error {
 	if p.walSize == 0 {
 		return nil
 	}

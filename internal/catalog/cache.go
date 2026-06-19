@@ -90,12 +90,6 @@ func copyUserInfo(u UserInfo) UserInfo {
 	return cp
 }
 
-// copyRoleInfo returns a deep copy of RoleInfo.
-func copyRoleInfo(r RoleInfo) RoleInfo { return r }
-
-// copyGrantInfo returns a deep copy of GrantInfo.
-func copyGrantInfo(g GrantInfo) GrantInfo { return g }
-
 // copySchemaHistoryEntry returns a deep copy.
 func copySchemaHistoryEntry(e SchemaHistoryEntry) SchemaHistoryEntry {
 	cp := e

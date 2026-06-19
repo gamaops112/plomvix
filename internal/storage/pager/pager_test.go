@@ -782,7 +782,7 @@ func TestReadWritePage_SurvivesCloseReopen(t *testing.T) {
 
 // extendFile is a helper that extends the backing file by one page, updating
 // the header accordingly. Used in tests before AllocatePage is implemented.
-func (p *filePager) extendFile(ctx context.Context) error {
+func (p *filePager) extendFile(_ context.Context) error {
 	newID := p.pageCount
 	// Write a zero-filled body
 	body := make([]byte, DataPageBodySize)

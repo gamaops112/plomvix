@@ -198,7 +198,7 @@ func isIdentChar(c byte) bool {
 
 // --- Semantic Validation (basic structural checks only) ---
 
-func validateSemantics(stmt vitess.Statement) *ParseError {
+func validateSemantics(_ vitess.Statement) *ParseError {
 	// Lightweight checks using Vitess APIs.
 	return nil
 }

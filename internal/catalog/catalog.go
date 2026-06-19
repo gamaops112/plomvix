@@ -9,11 +9,9 @@ package catalog
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/plomvix/plomvix/internal/engine/sql/heap"
@@ -287,19 +285,6 @@ func (c *catalog) RegisterEngine(e Engine) error {
 // isValidAction checks if an Action string is one of the valid RBAC actions.
 func isValidAction(a Action) bool {
 	return a == ActionRead || a == ActionWrite || a == ActionDDL
-}
-
-// genPasswordHash generates a salted SHA-256 hash (legacy format).
-func genPasswordHash(password string) ([]byte, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return nil, fmt.Errorf("catalog: rand: %w", err)
-	}
-	h := sha256.New()
-	h.Write(salt)
-	h.Write([]byte(password))
-	digest := h.Sum(nil)
-	return append(salt, digest...), nil
 }
 
 // genBcryptHash generates a bcrypt hash with cost 10.
