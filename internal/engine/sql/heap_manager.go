@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/plomvix/plomvix/internal/engine"
 	"github.com/plomvix/plomvix/internal/engine/sql/heap"
@@ -97,17 +98,21 @@ func (m *heapManager) RemoveHeap(tableID uint64) error {
 
 // tableHeapAdapter wraps a heap.Table to satisfy planner.TableHeap.
 type tableHeapAdapter struct {
-	t             heap.Table
-	mu            sync.Mutex
-	lastWriteTxID uint64
+	t              heap.Table
+	mu             sync.Mutex
+	lastWriteTxID  uint64
+	heapGeneration atomic.Uint64
+	activePins     atomic.Int64
 }
 
 func (a *tableHeapAdapter) Scan(ctx context.Context, tx engine.TxContext) (planner.HeapScanIterator, error) {
+	a.activePins.Add(1)
 	rows, err := a.t.Scan(ctx, heap.Tx{ID: tx.ReadTxID})
 	if err != nil {
+		a.activePins.Add(-1)
 		return nil, err
 	}
-	return &rowsAdapter{rows: rows}, nil
+	return &rowsAdapter{rows: rows, gen: a.heapGeneration.Load(), pins: &a.activePins}, nil
 }
 
 // Insert satisfies InsertableTableHeap for DML execution.
@@ -186,9 +191,12 @@ func (s *heapInsertStream) Abort() error {
 var _ InsertableTableHeap = (*tableHeapAdapter)(nil)
 
 // rowsAdapter wraps heap.Rows to satisfy planner.HeapScanIterator.
+// Emits generation-qualified RowIDs via engine.EncodeRowID.
 type rowsAdapter struct {
 	rows    heap.Rows
-	counter uint64
+	gen     uint64        // heap generation at scan-open time
+	pins    *atomic.Int64 // active scan/mutation pins
+	counter uint64        // synthetic physical offset
 }
 
 func (r *rowsAdapter) Next(ctx context.Context) ([]byte, uint64, error) {
@@ -199,15 +207,19 @@ func (r *rowsAdapter) Next(ctx context.Context) ([]byte, uint64, error) {
 		return nil, 0, io.EOF
 	}
 	vals := r.rows.Values()
-	// RowID = physicalOffset + 1. We use a synthetic counter since the heap
-	// doesn't expose physical offsets yet.
-	rowID := r.counter + 1
+	rowID, err := engine.EncodeRowID(r.gen, r.counter)
 	r.counter++
+	if err != nil {
+		return nil, 0, err
+	}
 	encoded, err := encodeRowToBytes(vals)
 	return encoded, rowID, err
 }
 
-func (r *rowsAdapter) Close() error { return r.rows.Close() }
+func (r *rowsAdapter) Close() error {
+	r.pins.Add(-1)
+	return r.rows.Close()
+}
 
 // encodeRowToBytes re-encodes a row of decoded values to a storage-composite
 // byte slice. The planner's RowDecoder reverses this format.

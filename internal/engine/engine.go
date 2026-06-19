@@ -1,10 +1,24 @@
 // Package engine defines the core contracts for pluggable query execution
 // engines in Plomvix. It provides types for schemas, rows, datum values,
 // transaction context, and the Engine interface that the Router dispatches to.
+//
+// RowID enterprise encoding:
+//
+//	RowID = (generation << 32) | (physicalOffset + 1)
+//
+// Decode:
+//
+//	physicalOffset = (rowID & 0xFFFFFFFF) - 1
+//	generation     = rowID >> 32
+//
+// Zero in the low 32 bits is the sentinel for "not from a heap scan"
+// (ErrMissingRowID). generation is the HeapGeneration counter at scan time.
 package engine
 
 import (
 	"context"
+	"errors"
+	"math"
 
 	"github.com/plomvix/plomvix/internal/sqlparser"
 )
@@ -62,10 +76,11 @@ func (d Datum) DeepCopy() Datum {
 }
 
 // Row is a single tuple with an opaque RowID for physical mutation targeting.
-// RowID = physicalOffset + 1. Zero means "not from a heap scan" (ErrMissingRowID).
+// Enterprise encoding: RowID = (generation << 32) | (physicalOffset + 1).
+// Zero low 32 bits = sentinel (not from heap scan, ErrMissingRowID).
 type Row struct {
 	Datums []Datum
-	RowID  uint64 // physicalOffset+1; 0 = sentinel (not from heap scan)
+	RowID  uint64 // (generation<<32)|(physicalOffset+1); 0 = sentinel
 }
 
 // DeepCopy calls DeepCopy on every Datum. RowID is copied by value.
@@ -76,6 +91,35 @@ func (r Row) DeepCopy() Row {
 	}
 	return cp
 }
+
+// EncodeRowID produces a generation-qualified RowID.
+// generation must be <= MaxUint32. physicalOffset must be <= MaxUint32-1.
+func EncodeRowID(generation, physicalOffset uint64) (uint64, error) {
+	if generation > math.MaxUint32 {
+		return 0, ErrRowIDGenerationOverflow
+	}
+	if physicalOffset > math.MaxUint32-1 {
+		return 0, ErrRowIDOffsetOverflow
+	}
+	return (generation << 32) | (physicalOffset + 1), nil
+}
+
+// DecodeRowID unpacks a generation-qualified RowID.
+// Returns ErrMissingRowID if the low 32 bits are zero (sentinel).
+func DecodeRowID(rowID uint64) (generation, physicalOffset uint64, err error) {
+	low := rowID & 0xFFFFFFFF
+	if low == 0 {
+		return 0, 0, ErrMissingRowID
+	}
+	return rowID >> 32, low - 1, nil
+}
+
+// Sentinel errors for RowID operations.
+var (
+	ErrMissingRowID            = errors.New("engine: row has no physical RowID; cannot mutate")
+	ErrRowIDOffsetOverflow     = errors.New("engine: physicalOffset exceeds 32-bit RowID encoding limit")
+	ErrRowIDGenerationOverflow = errors.New("engine: heap generation exceeds 32-bit RowID encoding limit")
+)
 
 // TxContext holds transaction-scoped metadata for query execution.
 type TxContext struct {

@@ -1,6 +1,10 @@
 package sql
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/plomvix/plomvix/internal/engine"
+)
 
 // DML sentinel errors.
 var (
@@ -20,9 +24,12 @@ var (
 	ErrTxConflict       = errors.New("sql engine: WriteTxID monotonic conflict")
 
 	// Mutation errors.
-	ErrWhereRequired           = errors.New("sql engine: UPDATE and DELETE require a WHERE clause")
-	ErrHeapMutationUnsupported = errors.New("sql engine: target table heap does not support mutation")
-	ErrMissingRowID            = errors.New("sql engine: row has no physical RowID; cannot mutate")
+	ErrWhereRequired            = errors.New("sql engine: UPDATE and DELETE require a WHERE clause")
+	ErrHeapMutationUnsupported  = errors.New("sql engine: target table heap does not support mutation")
+	ErrMissingRowID             = engine.ErrMissingRowID // alias from engine package
+	ErrStaleRowID               = errors.New("sql engine: RowID is stale; heap generation has advanced (vacuum ran)")
+	ErrWriteConflict            = errors.New("sql engine: write-write conflict detected; concurrent transaction modified row")
+	ErrVacuumBlockedByActivePins = errors.New("sql engine: vacuum compaction blocked by active DML pins")
 
 	// Constructor validation errors.
 	ErrNilCatalog       = errors.New("sql engine: catalog dependency is nil")

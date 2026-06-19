@@ -2,95 +2,133 @@ package sql
 
 import (
 	"context"
-	"encoding/binary"
-	"fmt"
+	"sync/atomic"
 
 	"github.com/plomvix/plomvix/internal/engine"
-	"github.com/plomvix/plomvix/internal/engine/sql/key"
 )
 
 // MutableTableHeap is the engine-facing contract for physical row mutation.
-// Implementations bridge to the internal heap.Tx type using tx.WriteTxID.
+// Enterprise version adds CheckWriteConflict and BatchMutate.
 type MutableTableHeap interface {
-	// DeleteByRowID appends a tombstone for the exact row version identified by rowID.
+	CheckWriteConflict(ctx context.Context, tx engine.TxContext, rowID uint64) error
 	DeleteByRowID(ctx context.Context, tx engine.TxContext, rowID uint64) error
-
-	// UpdateByRowID appends a new row version replacing the exact row version
-	// identified by rowID. newValues must match the table schema column count.
-	// The concrete adapter loads the original row to verify PK columns are unchanged.
 	UpdateByRowID(ctx context.Context, tx engine.TxContext, rowID uint64, newValues []engine.Datum) error
+	BatchMutate(ctx context.Context, tx engine.TxContext, mutations []RowMutation) (int, error)
 }
 
+// RowMutation describes a single row operation within a BatchMutate call.
+type RowMutation struct {
+	RowID     uint64
+	Op        MutationOp
+	NewValues []engine.Datum // nil for OpDelete
+}
+
+// MutationOp classifies a row mutation.
+type MutationOp uint8
+
+const (
+	OpDelete MutationOp = iota
+	OpUpdate
+)
+
 // heapMutableAdapter bridges MutableTableHeap to the internal heap.Table.
-// It wraps the same tableHeapAdapter to share lastWriteTxID state.
+// Shares activePins and lastWriteTxID with the parent tableHeapAdapter.
 type heapMutableAdapter struct {
-	a *tableHeapAdapter
+	a              *tableHeapAdapter
+	heapGeneration atomic.Uint64
 }
 
 var _ MutableTableHeap = (*heapMutableAdapter)(nil)
-
-func (m *heapMutableAdapter) DeleteByRowID(ctx context.Context, tx engine.TxContext, rowID uint64) error {
-	if rowID == 0 {
-		return ErrMissingRowID
-	}
-	m.a.mu.Lock()
-	defer m.a.mu.Unlock()
-	if tx.WriteTxID <= m.a.lastWriteTxID {
-		return ErrTxConflict
-	}
-
-	// Resolve the original row from the heap using the physical offset.
-	physicalOffset := rowID - 1
-	_ = physicalOffset // TODO: implement physical offset lookup when heap exposes it.
-
-	// For now, we can't actually delete by RowID without physical offset support.
-	// Return a meaningful error until the heap exposes row addressing.
-	return fmt.Errorf("sql engine: DeleteByRowID: physical offset not yet supported")
-}
-
-func (m *heapMutableAdapter) UpdateByRowID(ctx context.Context, tx engine.TxContext, rowID uint64, newValues []engine.Datum) error {
-	if rowID == 0 {
-		return ErrMissingRowID
-	}
-	m.a.mu.Lock()
-	defer m.a.mu.Unlock()
-	if tx.WriteTxID <= m.a.lastWriteTxID {
-		return ErrTxConflict
-	}
-
-	// Convert newValues to []any for heap operations.
-	vals := make([]any, len(newValues))
-	for i, d := range newValues {
-		vals[i] = d.Value
-	}
-
-	// Derive RowKey from rowID and re-encode with new WriteTxID.
-	// Use a synthetic approach: encode a tombstone for old version,
-	// then insert a new version.
-	rowKeyBytes := encodeRowIDKey(rowID, tx.WriteTxID)
-	rowValue, err := key.EncodeStorageComposite(vals...)
-	if err != nil {
-		return fmt.Errorf("sql engine: UpdateByRowID encode: %w", err)
-	}
-
-	_ = rowKeyBytes
-	_ = rowValue
-
-	// TODO: When heap exposes physical offset addressing, implement proper update.
-	return fmt.Errorf("sql engine: UpdateByRowID: physical offset not yet supported")
-}
-
-// encodeRowIDKey encodes a RowID + WriteTxID into a key.Key for heap operations.
-func encodeRowIDKey(rowID uint64, txID uint64) key.Key {
-	buf := make([]byte, 16)
-	binary.BigEndian.PutUint64(buf[:8], rowID)
-	binary.BigEndian.PutUint64(buf[8:], txID)
-	return key.FromBytes(buf)
-}
 
 // AsMutable wraps a tableHeapAdapter as a MutableTableHeap for UPDATE/DELETE.
 func AsMutable(a *tableHeapAdapter) MutableTableHeap {
 	return &heapMutableAdapter{a: a}
 }
 
-var _ MutableTableHeap = (*heapMutableAdapter)(nil)
+func (m *heapMutableAdapter) checkWriteConflictLocked(tx engine.TxContext, rowID uint64) error {
+	gen, _, err := engine.DecodeRowID(rowID)
+	if err != nil {
+		return err
+	}
+	if gen != m.heapGeneration.Load() {
+		return ErrStaleRowID
+	}
+	return nil
+}
+
+func (m *heapMutableAdapter) CheckWriteConflict(ctx context.Context, tx engine.TxContext, rowID uint64) error {
+	m.a.mu.Lock()
+	defer m.a.mu.Unlock()
+	return m.checkWriteConflictLocked(tx, rowID)
+}
+
+func (m *heapMutableAdapter) DeleteByRowID(ctx context.Context, tx engine.TxContext, rowID uint64) error {
+	m.a.activePins.Add(1)
+	defer m.a.activePins.Add(-1)
+	m.a.mu.Lock()
+	defer m.a.mu.Unlock()
+	if err := m.checkWriteConflictLocked(tx, rowID); err != nil {
+		return err
+	}
+	_, _, err := engine.DecodeRowID(rowID)
+	if err != nil {
+		return err
+	}
+	return ErrHeapMutationUnsupported // TODO: heap physical offset addressing
+}
+
+func (m *heapMutableAdapter) UpdateByRowID(ctx context.Context, tx engine.TxContext, rowID uint64, newValues []engine.Datum) error {
+	m.a.activePins.Add(1)
+	defer m.a.activePins.Add(-1)
+	m.a.mu.Lock()
+	defer m.a.mu.Unlock()
+	if err := m.checkWriteConflictLocked(tx, rowID); err != nil {
+		return err
+	}
+	_, _, err := engine.DecodeRowID(rowID)
+	if err != nil {
+		return err
+	}
+	return ErrHeapMutationUnsupported // TODO: heap physical offset addressing
+}
+
+func (m *heapMutableAdapter) BatchMutate(ctx context.Context, tx engine.TxContext, mutations []RowMutation) (int, error) {
+	m.a.activePins.Add(1)
+	defer m.a.activePins.Add(-1)
+	m.a.mu.Lock()
+	defer m.a.mu.Unlock()
+	for _, mut := range mutations {
+		if err := m.checkWriteConflictLocked(tx, mut.RowID); err != nil {
+			return 0, err
+		}
+	}
+	rowsAffected := 0
+	for _, mut := range mutations {
+		if err := m.applyLocked(ctx, tx, mut); err != nil {
+			return rowsAffected, err
+		}
+		rowsAffected++
+	}
+	return rowsAffected, nil
+}
+
+func (m *heapMutableAdapter) applyLocked(ctx context.Context, tx engine.TxContext, mut RowMutation) error {
+	_, _, err := engine.DecodeRowID(mut.RowID)
+	if err != nil {
+		return err
+	}
+	return ErrHeapMutationUnsupported // TODO: heap physical offset addressing
+}
+
+// BumpGeneration increments the heap generation. Called after vacuum/compaction.
+func (m *heapMutableAdapter) BumpGeneration() error {
+	if m.a.activePins.Load() != 0 {
+		return ErrVacuumBlockedByActivePins
+	}
+	m.heapGeneration.Add(1)
+	return nil
+}
+
+func (m *heapMutableAdapter) Generation() uint64 {
+	return m.heapGeneration.Load()
+}

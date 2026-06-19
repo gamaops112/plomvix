@@ -94,7 +94,9 @@ func TestPlanTemplate_Build(t *testing.T) {
 
 type fakeTableHeap struct{ rows [][]byte }
 
-func (f *fakeTableHeap) Scan(ctx context.Context, tx engine.TxContext) (HeapScanIterator, error) { return &fakeIter{rows: f.rows}, nil }
+func (f *fakeTableHeap) Scan(ctx context.Context, tx engine.TxContext) (HeapScanIterator, error) {
+	return &fakeIter{rows: f.rows}, nil
+}
 
 type fakeIter struct {
 	rows [][]byte
