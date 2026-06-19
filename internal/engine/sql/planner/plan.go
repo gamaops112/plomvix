@@ -51,16 +51,17 @@ type SeqScanNode struct {
 	heap    TableHeap
 	decoder RowDecoder
 	schema  engine.Schema
+	tx      engine.TxContext
 	iter    HeapScanIterator
 }
 
 // NewSeqScanNode creates a sequential scan operator.
-func NewSeqScanNode(heap TableHeap, decoder RowDecoder, schema engine.Schema) *SeqScanNode {
-	return &SeqScanNode{heap: heap, decoder: decoder, schema: schema}
+func NewSeqScanNode(heap TableHeap, decoder RowDecoder, schema engine.Schema, tx engine.TxContext) *SeqScanNode {
+	return &SeqScanNode{heap: heap, decoder: decoder, schema: schema, tx: tx}
 }
 
 func (n *SeqScanNode) Open(ctx context.Context) error {
-	iter, err := n.heap.Scan(ctx, engine.TxContext{})
+	iter, err := n.heap.Scan(ctx, n.tx)
 	if err != nil {
 		return err
 	}

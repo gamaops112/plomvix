@@ -224,3 +224,9 @@ func (s *stmtWrapper) RawDDL() vitess.DDLStatement {
 	ddl, _ := s.ast.(vitess.DDLStatement)
 	return ddl
 }
+
+// RawInsert returns the underlying Vitess Insert node, or nil if not an INSERT.
+func (s *stmtWrapper) RawInsert() *vitess.Insert {
+	insert, _ := s.ast.(*vitess.Insert)
+	return insert
+}

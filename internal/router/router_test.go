@@ -96,7 +96,8 @@ func TestRoute_Select(t *testing.T) {
 func TestRoute_Unsupported(t *testing.T) {
 	r := New(&mockCatalog{tables: map[string]catalog.TableInfo{}, permOk: true})
 	p, _ := sqlparser.New()
-	stmt, _ := p.Parse("INSERT INTO users VALUES (1)")
+	// UPDATE is still unsupported.
+	stmt, _ := p.Parse("UPDATE users SET id = 1")
 	_, err := r.Route(context.Background(), 1, stmt)
 	if err != ErrUnsupportedStatement {
 		t.Errorf("got %v, want ErrUnsupportedStatement", err)

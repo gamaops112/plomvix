@@ -20,9 +20,19 @@ func NewManager(readBase, writeBase uint64) *Manager {
 	return m
 }
 
-// NextReadTx allocates a new read transaction ID.
+// NextReadTx allocates a new read transaction ID. It guarantees the returned
+// value is >= the latest WriteTxID so that committed writes are visible.
 func (m *Manager) NextReadTx() uint64 {
-	return m.nextRead.Add(1)
+	// Advance read counter beyond current write counter for visibility.
+	for {
+		r := m.nextRead.Add(1)
+		w := m.nextWrite.Load()
+		if r >= w {
+			return r
+		}
+		// Write counter advanced past us; bump read to match.
+		m.nextRead.Store(w)
+	}
 }
 
 // NextWriteTx allocates a new write transaction ID.

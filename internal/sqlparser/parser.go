@@ -43,6 +43,8 @@ type Statement interface {
 
 	// DDL accessor (returns nil for non-DDL statements).
 	RawDDL() vitess.DDLStatement
+	// DML accessor (returns nil for non-INSERT statements).
+	RawInsert() *vitess.Insert
 }
 
 // ParseError supersedes the Basic tier's SyntaxError with byte offset support.

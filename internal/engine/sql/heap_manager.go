@@ -104,6 +104,17 @@ func (a *tableHeapAdapter) Scan(ctx context.Context, tx engine.TxContext) (plann
 	return &rowsAdapter{rows: rows}, nil
 }
 
+// Insert satisfies InsertableTableHeap for DML execution.
+func (a *tableHeapAdapter) Insert(ctx context.Context, tx engine.TxContext, row engine.Row) error {
+	vals := make([]any, len(row))
+	for i, d := range row {
+		vals[i] = d.Value
+	}
+	return a.t.Insert(ctx, heap.Tx{ID: tx.WriteTxID}, vals)
+}
+
+var _ InsertableTableHeap = (*tableHeapAdapter)(nil)
+
 // rowsAdapter wraps heap.Rows to satisfy planner.HeapScanIterator.
 type rowsAdapter struct {
 	rows heap.Rows

@@ -85,7 +85,7 @@ func TestPlanTemplate_Build(t *testing.T) {
 	}
 	heap := &fakeTableHeap{rows: [][]byte{}}
 	decoder := &fakeRowDecoder{}
-	op := tmpl.Build(heap, decoder)
+	op := tmpl.Build(heap, decoder, engine.TxContext{})
 	if op == nil {
 		t.Error("Build returned nil")
 	}

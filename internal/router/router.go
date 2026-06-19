@@ -54,6 +54,8 @@ func (r *Router) Route(ctx context.Context, userID uint64, stmt sqlparser.Statem
 		return r.routeSelect(ctx, userID, stmt)
 	case sqlparser.StmtDDL:
 		return r.routeDDL(ctx, userID, stmt)
+	case sqlparser.StmtInsert:
+		return r.routeInsert(ctx, userID, stmt)
 	default:
 		return nil, ErrUnsupportedStatement
 	}
@@ -110,6 +112,42 @@ func (r *Router) routeDDL(ctx context.Context, userID uint64, stmt sqlparser.Sta
 	if !ok {
 		return nil, ErrEngineNotFound
 	}
+	return eng.Execute(ctx, &engine.Request{
+		Stmt:      stmt,
+		UserID:    userID,
+		TxContext: engine.TxContext{},
+	})
+}
+
+// routeInsert dispatches INSERT to the owning engine with write permission check.
+func (r *Router) routeInsert(ctx context.Context, userID uint64, stmt sqlparser.Statement) (*engine.Result, error) {
+	insert := stmt.RawInsert()
+	if insert == nil {
+		return nil, ErrUnsupportedStatement
+	}
+	tableName := insert.Table.TableNameString()
+	if tableName == "" {
+		return nil, ErrNoTargetTable
+	}
+
+	info, err := r.catalog.GetTable(ctx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	ok, err := r.catalog.CheckPermission(ctx, userID, info.TableID, catalog.ActionWrite)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, ErrPermissionDenied
+	}
+
+	eng, ok := r.engines[info.EngineName]
+	if !ok {
+		return nil, ErrEngineNotFound
+	}
+
 	return eng.Execute(ctx, &engine.Request{
 		Stmt:      stmt,
 		UserID:    userID,

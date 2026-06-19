@@ -92,13 +92,20 @@ func NewSQLEngine(
 func (e *SQLEngine) Name() string { return "sql" }
 
 // Execute dispatches based on statement type: SELECT uses the cache-first
-// planner flow; DDL executes table creation or removal.
+// planner flow; DDL executes table creation or removal; INSERT appends rows.
 func (e *SQLEngine) Execute(ctx context.Context, req *engine.Request) (*engine.Result, error) {
+	// Allocate WriteTxID exactly once for DML and DDL.
+	if req.Stmt.Type() == sqlparser.StmtInsert || req.Stmt.Type() == sqlparser.StmtDDL {
+		req.TxContext.WriteTxID = e.txm.NextWriteTx()
+	}
+
 	switch req.Stmt.Type() {
 	case sqlparser.StmtSelect:
 		return e.executeSelect(ctx, req)
 	case sqlparser.StmtDDL:
 		return e.executeDDL(ctx, req)
+	case sqlparser.StmtInsert:
+		return e.execInsert(ctx, req)
 	default:
 		return nil, ErrUnsupportedFeature
 	}
@@ -137,7 +144,7 @@ func (e *SQLEngine) executeSelect(ctx context.Context, req *engine.Request) (*en
 		return nil, fmt.Errorf("sql engine: table heap %d: %w", tmpl.TableID, planner.ErrTableHeapNotFound)
 	}
 
-	op := tmpl.Build(heap, e.decoder)
+	op := tmpl.Build(heap, e.decoder, req.TxContext)
 	if err := op.Open(ctx); err != nil {
 		_ = op.Close()
 		return nil, err
@@ -158,7 +165,6 @@ func (e *SQLEngine) executeDDL(ctx context.Context, req *engine.Request) (*engin
 	if ddlStmt == nil {
 		return nil, ErrUnsupportedDDL
 	}
-	req.TxContext.WriteTxID = e.txm.NextWriteTx()
 
 	action := ddlStmt.GetAction()
 	switch action {

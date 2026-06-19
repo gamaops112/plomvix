@@ -28,8 +28,8 @@ type PlanTemplate struct {
 // Build instantiates a fresh Operator tree from this template.
 // The returned Operator has NOT been opened. Each call produces an
 // independent tree with no shared mutable state.
-func (t *PlanTemplate) Build(heap TableHeap, decoder RowDecoder) Operator {
-	var op Operator = NewSeqScanNode(heap, decoder, t.InputSchema)
+func (t *PlanTemplate) Build(heap TableHeap, decoder RowDecoder, tx engine.TxContext) Operator {
+	var op Operator = NewSeqScanNode(heap, decoder, t.InputSchema, tx)
 	if t.WhereExpr != nil {
 		op = NewFilterNode(op, t.WhereExpr)
 	}

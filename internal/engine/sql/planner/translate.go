@@ -114,7 +114,7 @@ func Translate(
 	}
 
 	// Build the operator tree.
-	var op Operator = NewSeqScanNode(heap, decoder, engSchema)
+	var op Operator = NewSeqScanNode(heap, decoder, engSchema, req.TxContext)
 
 	// Bind WHERE clause if present.
 	sel, ok := stmt.RawAST().(*vitess.Select)

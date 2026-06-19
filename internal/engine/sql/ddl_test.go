@@ -218,7 +218,8 @@ func TestDDL_UnsupportedStatement(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	stmt := parseStmt(t, "INSERT INTO t VALUES (1)")
+	// UPDATE is still unsupported.
+	stmt := parseStmt(t, "UPDATE t SET x = 1")
 	_, err := eng.Execute(ctx, &engine.Request{Stmt: stmt, UserID: adminUI.UserID})
 	if err == nil {
 		t.Fatal("expected error for unsupported statement")
