@@ -146,9 +146,10 @@ type Result struct {
 
 // Request encapsulates a parsed statement with execution context.
 type Request struct {
-	Stmt      sqlparser.Statement
-	UserID    uint64
-	TxContext TxContext
+	Stmt                 sqlparser.Statement
+	UserID               uint64
+	TxContext            TxContext
+	AllowFullTableDelete bool // When true, permits DELETE FROM t with no WHERE clause.
 }
 
 // Engine is a pluggable query execution backend.

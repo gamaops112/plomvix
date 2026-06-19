@@ -12,16 +12,18 @@ import (
 	vitess "vitess.io/vitess/go/vt/sqlparser"
 )
 
-// execDelete handles DELETE FROM t WHERE ...
+// execDelete handles DELETE FROM t WHERE ... (enterprise: multi-row + full-table).
 func (e *SQLEngine) execDelete(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 	del := req.Stmt.RawDelete()
 	if del == nil {
 		return nil, ErrUnsupportedDML
 	}
 
-	// WHERE is required.
+	// Full-table DELETE gate.
 	if del.Where == nil {
-		return nil, ErrWhereRequired
+		if !req.AllowFullTableDelete {
+			return nil, ErrDeleteAllRequiresConfirmation
+		}
 	}
 
 	tableName, err := extractSingleDMLTableName(del.TableExprs)
@@ -29,10 +31,18 @@ func (e *SQLEngine) execDelete(ctx context.Context, req *engine.Request) (*engin
 		return nil, err
 	}
 
-	// Resolve schema, heap, and bind WHERE.
-	heapTarget, engSchema, err := e.resolveAndBindWhere(ctx, tableName, del.Where.Expr)
+	// Resolve schema and heap.
+	tableInfo, err := e.catalog.GetTable(ctx, tableName)
 	if err != nil {
 		return nil, err
+	}
+	engSchema, err := schema.Decode(tableInfo.SchemaPayload)
+	if err != nil {
+		return nil, fmt.Errorf("sql engine: decode schema: %w", err)
+	}
+	heapTarget, err := e.tables.GetTableHeap(tableInfo.TableID)
+	if err != nil {
+		return nil, fmt.Errorf("sql engine: get table heap: %w", err)
 	}
 
 	mutHeap, ok := heapTarget.(*tableHeapAdapter)
@@ -40,31 +50,47 @@ func (e *SQLEngine) execDelete(ctx context.Context, req *engine.Request) (*engin
 		return nil, ErrHeapMutationUnsupported
 	}
 
-	// Collect matching rows via Volcano pipeline.
-	matched, err := e.collectMatchingRows(ctx, req, heapTarget, &engSchema, del.Where.Expr)
+	// Collect all matching rows (or all rows for full-table).
+	matched, err := e.collectMatchingRowsEnterprise(ctx, req, heapTarget, &engSchema, del.Where)
 	if err != nil {
 		return nil, err
 	}
 	if len(matched) == 0 {
 		return nil, ErrRowNotFound
 	}
-	if len(matched) > 1 {
-		return nil, ErrMultiRowMutationUnsupported
+
+	// Build mutations.
+	mutations := make([]RowMutation, len(matched))
+	for i, row := range matched {
+		if row.RowID == 0 {
+			return nil, ErrMissingRowID
+		}
+		mutations[i] = RowMutation{RowID: row.RowID, Op: OpDelete}
 	}
 
-	target := matched[0]
-	if target.RowID == 0 {
-		return nil, ErrMissingRowID
+	rowsAffected, err := AsMutable(mutHeap).BatchMutate(ctx, req.TxContext, mutations)
+	if err != nil {
+		e.log.Warn("dml: DELETE mutation failed",
+			"table", tableName,
+			"rows_succeeded", rowsAffected,
+			"total_matched", len(matched),
+			"write_tx_id", req.TxContext.WriteTxID,
+			"error", err.Error(),
+		)
+		return nil, err
 	}
 
-	if err := AsMutable(mutHeap).DeleteByRowID(ctx, req.TxContext, target.RowID); err != nil {
-		return nil, fmt.Errorf("sql engine: delete: %w", err)
-	}
+	e.log.Info("dml: DELETE",
+		"table", tableName,
+		"rows_affected", rowsAffected,
+		"write_tx_id", req.TxContext.WriteTxID,
+		"conflict_checked", true,
+	)
 
 	return &engine.Result{
 		Stream:       nil,
-		RowsAffected: 1,
-		Message:      "DELETE 1",
+		RowsAffected: int64(rowsAffected),
+		Message:      fmt.Sprintf("DELETE %d", rowsAffected),
 	}, nil
 }
 
@@ -88,44 +114,30 @@ func extractSingleDMLTableName(exprs vitess.TableExprs) (string, error) {
 	return name, nil
 }
 
-// resolveAndBindWhere resolves the table schema, gets the heap, and binds the WHERE clause.
-func (e *SQLEngine) resolveAndBindWhere(ctx context.Context, tableName string, where vitess.Expr) (planner.TableHeap, engine.Schema, error) {
-	tableInfo, err := e.catalog.GetTable(ctx, tableName)
-	if err != nil {
-		return nil, engine.Schema{}, err
-	}
-	engSchema, err := schema.Decode(tableInfo.SchemaPayload)
-	if err != nil {
-		return nil, engine.Schema{}, fmt.Errorf("sql engine: decode schema: %w", err)
-	}
-	heapTarget, err := e.tables.GetTableHeap(tableInfo.TableID)
-	if err != nil {
-		return nil, engine.Schema{}, fmt.Errorf("sql engine: get table heap: %w", err)
-	}
-	return heapTarget, engSchema, nil
-}
-
-// collectMatchingRows builds the Volcano pipeline, opens it, and collects all matching rows.
-func (e *SQLEngine) collectMatchingRows(ctx context.Context, req *engine.Request, heapTarget planner.TableHeap, engSchema *engine.Schema, where vitess.Expr) ([]engine.Row, error) {
-	boundWhere, err := planner.BindWhere(where, *engSchema)
-	if err != nil {
-		if errors.Is(err, planner.ErrUnsupportedFeature) {
-			return nil, ErrUnsupportedWhereExpr
-		}
-		return nil, err
-	}
-
+// collectMatchingRowsEnterprise collects all rows, respecting maxMutationRows.
+func (e *SQLEngine) collectMatchingRowsEnterprise(ctx context.Context, req *engine.Request, heapTarget planner.TableHeap, engSchema *engine.Schema, where *vitess.Where) ([]engine.Row, error) {
 	scanNode := planner.NewSeqScanNode(heapTarget, e.decoder, *engSchema, req.TxContext)
-	filterNode := planner.NewFilterNode(scanNode, boundWhere)
+	var source planner.Operator = scanNode
 
-	if err := filterNode.Open(ctx); err != nil {
+	if where != nil {
+		boundWhere, err := planner.BindWhere(where.Expr, *engSchema)
+		if err != nil {
+			if errors.Is(err, planner.ErrUnsupportedFeature) {
+				return nil, ErrUnsupportedWhereExpr
+			}
+			return nil, err
+		}
+		source = planner.NewFilterNode(scanNode, boundWhere)
+	}
+
+	if err := source.Open(ctx); err != nil {
 		return nil, err
 	}
-	defer filterNode.Close()
+	defer source.Close()
 
 	var matched []engine.Row
 	for {
-		row, err := filterNode.Next(ctx)
+		row, err := source.Next(ctx)
 		if err == io.EOF {
 			break
 		}
@@ -133,6 +145,9 @@ func (e *SQLEngine) collectMatchingRows(ctx context.Context, req *engine.Request
 			return nil, err
 		}
 		matched = append(matched, row.DeepCopy())
+		if e.maxMutationRows > 0 && len(matched) > e.maxMutationRows {
+			return nil, ErrMutationLimitExceeded
+		}
 	}
 	return matched, nil
 }

@@ -9,14 +9,14 @@ import (
 	"github.com/plomvix/plomvix/internal/engine/sql/schema"
 )
 
-// execUpdate handles UPDATE t SET ... WHERE ...
+// execUpdate handles UPDATE t SET ... WHERE ... (enterprise: multi-row).
 func (e *SQLEngine) execUpdate(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 	upd := req.Stmt.RawUpdate()
 	if upd == nil {
 		return nil, ErrUnsupportedDML
 	}
 
-	// WHERE is required.
+	// WHERE is required for UPDATE (unchanged from setup plan).
 	if upd.Where == nil {
 		return nil, ErrWhereRequired
 	}
@@ -49,11 +49,9 @@ func (e *SQLEngine) execUpdate(ctx context.Context, req *engine.Request) (*engin
 		if _, dup := setByName[colName]; dup {
 			return nil, fmt.Errorf("%w: %q", ErrDuplicateColumn, colName)
 		}
-		// Validate column exists in schema.
 		if _, ok := schemaIndexByName[colName]; !ok {
 			return nil, fmt.Errorf("%w: %q", ErrUnknownColumn, colName)
 		}
-		// Map literal value using the same literal switch as INSERT.
 		col := engSchema.Columns[schemaIndexByName[colName]]
 		d, err := mapLiteral(ue.Expr, col)
 		if err != nil {
@@ -72,39 +70,53 @@ func (e *SQLEngine) execUpdate(ctx context.Context, req *engine.Request) (*engin
 		return nil, ErrHeapMutationUnsupported
 	}
 
-	// --- 3. Collect matching rows via Volcano ---
-	matched, err := e.collectMatchingRows(ctx, req, heapTarget, &engSchema, upd.Where.Expr)
+	// --- 3. Collect matching rows via Volcano (enterprise: multi-row) ---
+	matched, err := e.collectMatchingRowsEnterprise(ctx, req, heapTarget, &engSchema, upd.Where)
 	if err != nil {
 		return nil, err
 	}
 	if len(matched) == 0 {
 		return nil, ErrRowNotFound
 	}
-	if len(matched) > 1 {
-		return nil, ErrMultiRowMutationUnsupported
-	}
 
-	target := matched[0]
-	if target.RowID == 0 {
-		return nil, ErrMissingRowID
-	}
-
-	// --- 4. Apply SET values to build new row ---
-	newValues := make([]engine.Datum, len(target.Datums))
-	copy(newValues, target.Datums)
-	for colName, d := range setByName {
-		idx := schemaIndexByName[colName]
-		newValues[idx] = d
+	// --- 4. Build RowMutation list ---
+	mutations := make([]RowMutation, len(matched))
+	for i, row := range matched {
+		if row.RowID == 0 {
+			return nil, ErrMissingRowID
+		}
+		newValues := make([]engine.Datum, len(row.Datums))
+		copy(newValues, row.Datums)
+		for colName, datum := range setByName {
+			idx := schemaIndexByName[colName]
+			newValues[idx] = datum
+		}
+		mutations[i] = RowMutation{RowID: row.RowID, Op: OpUpdate, NewValues: newValues}
 	}
 
 	mh := AsMutable(mutHeap)
-	if err := mh.UpdateByRowID(ctx, req.TxContext, target.RowID, newValues); err != nil {
-		return nil, fmt.Errorf("sql engine: update: %w", err)
+	rowsAffected, err := mh.BatchMutate(ctx, req.TxContext, mutations)
+	if err != nil {
+		e.log.Warn("dml: UPDATE mutation failed",
+			"table", tableName,
+			"rows_succeeded", rowsAffected,
+			"total_matched", len(matched),
+			"write_tx_id", req.TxContext.WriteTxID,
+			"error", err.Error(),
+		)
+		return nil, err
 	}
+
+	e.log.Info("dml: UPDATE",
+		"table", tableName,
+		"rows_affected", rowsAffected,
+		"write_tx_id", req.TxContext.WriteTxID,
+		"conflict_checked", true,
+	)
 
 	return &engine.Result{
 		Stream:       nil,
-		RowsAffected: 1,
-		Message:      "UPDATE 1",
+		RowsAffected: int64(rowsAffected),
+		Message:      fmt.Sprintf("UPDATE %d", rowsAffected),
 	}, nil
 }

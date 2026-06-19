@@ -106,6 +106,10 @@ func BindWhere(expr vitess.Expr, schema engine.Schema) (BoundExpr, error) {
 	}
 	switch e := expr.(type) {
 	case *vitess.ComparisonExpr:
+		// IN list: WHERE col IN (1, 2, 3)
+		if e.Operator == vitess.InOp {
+			return bindInPredicate(e, schema)
+		}
 		left, err := BindWhere(e.Left, schema)
 		if err != nil {
 			return nil, err
@@ -116,6 +120,9 @@ func BindWhere(expr vitess.Expr, schema engine.Schema) (BoundExpr, error) {
 		}
 		op := comparisonOpString(e.Operator)
 		return &cmpExpr{left: left, right: right, op: op}, nil
+	case *vitess.BetweenExpr:
+		// BETWEEN: WHERE col BETWEEN lo AND hi
+		return bindBetweenPredicate(e, schema)
 	case *vitess.AndExpr:
 		left, err := BindWhere(e.Left, schema)
 		if err != nil {
@@ -196,21 +203,116 @@ func BindProjection(exprs *vitess.SelectExprs, schema engine.Schema) ([]Projecti
 }
 
 func bindLiteral(lit *vitess.Literal) (BoundExpr, error) {
-	val := string(lit.Val)
+	switch lit.Type {
+	case vitess.IntVal, vitess.StrVal, vitess.FloatVal:
+		return &literalExpr{d: literalToDatum(lit)}, nil
+	default:
+		return nil, fmt.Errorf("%w: unsupported literal type", ErrUnsupportedFeature)
+	}
+}
+
+func literalToDatum(lit *vitess.Literal) engine.Datum {
 	switch lit.Type {
 	case vitess.IntVal:
-		var i int64
-		fmt.Sscanf(val, "%d", &i)
-		return &literalExpr{d: engine.Datum{Type: engine.TypeInt64, Value: i}}, nil
+		return engine.Datum{Type: engine.TypeInt64, Value: parseIntOrZero(lit.Val)}
 	case vitess.FloatVal:
-		var f float64
-		fmt.Sscanf(val, "%f", &f)
-		return &literalExpr{d: engine.Datum{Type: engine.TypeFloat64, Value: f}}, nil
+		return engine.Datum{Type: engine.TypeFloat64, Value: parseFloatOrZero(lit.Val)}
 	case vitess.StrVal:
-		return &literalExpr{d: engine.Datum{Type: engine.TypeString, Value: val}}, nil
+		return engine.Datum{Type: engine.TypeString, Value: lit.Val}
 	default:
-		return nil, fmt.Errorf("%w: literal type %v", ErrUnsupportedFeature, lit.Type)
+		return engine.Datum{}
 	}
+}
+
+// InPredicate evaluates col IN (v1, v2, ...).
+type InPredicate struct {
+	ColIdx int
+	Values []engine.Datum
+}
+
+func (p *InPredicate) Eval(row engine.Row) (engine.Datum, error) {
+	if p.ColIdx >= len(row.Datums) {
+		return engine.Datum{}, fmt.Errorf("planner: IN column index out of range")
+	}
+	val := row.Datums[p.ColIdx]
+	for _, v := range p.Values {
+		if datumEqual(val, v) {
+			return engine.Datum{Type: engine.TypeBool, Value: true}, nil
+		}
+	}
+	return engine.Datum{Type: engine.TypeBool, Value: false}, nil
+}
+
+// BetweenPredicate evaluates col BETWEEN lo AND hi.
+type BetweenPredicate struct {
+	ColIdx int
+	Lo, Hi engine.Datum
+}
+
+func (p *BetweenPredicate) Eval(row engine.Row) (engine.Datum, error) {
+	if p.ColIdx >= len(row.Datums) {
+		return engine.Datum{}, fmt.Errorf("planner: BETWEEN column index out of range")
+	}
+	val := row.Datums[p.ColIdx]
+	geLo := datumEqual(val, p.Lo) || datumLess(p.Lo, val)
+	leHi := datumEqual(val, p.Hi) || datumLess(val, p.Hi)
+	return engine.Datum{Type: engine.TypeBool, Value: geLo && leHi}, nil
+}
+
+func bindInPredicate(e *vitess.ComparisonExpr, schema engine.Schema) (BoundExpr, error) {
+	colName, ok := e.Left.(*vitess.ColName)
+	if !ok {
+		return nil, fmt.Errorf("%w: IN requires column reference", ErrUnsupportedFeature)
+	}
+	idx := colIndex(colName.Name.String(), schema)
+	if idx < 0 {
+		return nil, fmt.Errorf("planner: IN column %q not found", colName.Name.String())
+	}
+	tuple, ok := e.Right.(vitess.ValTuple)
+	if !ok {
+		return nil, fmt.Errorf("%w: IN requires literal tuple", ErrUnsupportedFeature)
+	}
+	var values []engine.Datum
+	for _, expr := range tuple {
+		lit, ok := expr.(*vitess.Literal)
+		if !ok {
+			return nil, fmt.Errorf("%w: IN values must be literals", ErrUnsupportedFeature)
+		}
+		values = append(values, literalToDatum(lit))
+	}
+	return &InPredicate{ColIdx: idx, Values: values}, nil
+}
+
+func bindBetweenPredicate(e *vitess.BetweenExpr, schema engine.Schema) (BoundExpr, error) {
+	colName, ok := e.Left.(*vitess.ColName)
+	if !ok {
+		return nil, fmt.Errorf("%w: BETWEEN requires column reference", ErrUnsupportedFeature)
+	}
+	idx := colIndex(colName.Name.String(), schema)
+	if idx < 0 {
+		return nil, fmt.Errorf("planner: BETWEEN column %q not found", colName.Name.String())
+	}
+	loLit, ok := e.From.(*vitess.Literal)
+	if !ok {
+		return nil, fmt.Errorf("%w: BETWEEN requires literal bounds", ErrUnsupportedFeature)
+	}
+	hiLit, ok := e.To.(*vitess.Literal)
+	if !ok {
+		return nil, fmt.Errorf("%w: BETWEEN requires literal bounds", ErrUnsupportedFeature)
+	}
+	return &BetweenPredicate{ColIdx: idx, Lo: literalToDatum(loLit), Hi: literalToDatum(hiLit)}, nil
+}
+
+func parseIntOrZero(s string) int64 {
+	var i int64
+	fmt.Sscanf(s, "%d", &i)
+	return i
+}
+
+func parseFloatOrZero(s string) float64 {
+	var f float64
+	fmt.Sscanf(s, "%f", &f)
+	return f
 }
 
 func colIndex(name string, schema engine.Schema) int {

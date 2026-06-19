@@ -38,28 +38,30 @@ var (
 
 // SQLEngine implements engine.Engine for SQL queries and DDL.
 type SQLEngine struct {
-	catalog      catalog.Catalog
-	versions     planner.SchemaVersionProvider
-	tables       TableManager
-	decoder      planner.RowDecoder
-	cache        *planner.PlanCache
-	txm          *tx.Manager
-	vacuum       *vacuum.Manager
-	log          *slog.Logger
-	maxBatchSize int
+	catalog         catalog.Catalog
+	versions        planner.SchemaVersionProvider
+	tables          TableManager
+	decoder         planner.RowDecoder
+	cache           *planner.PlanCache
+	txm             *tx.Manager
+	vacuum          *vacuum.Manager
+	log             *slog.Logger
+	maxBatchSize    int
+	maxMutationRows int
 }
 
 // SQLEngineConfig holds all injectable dependencies for the SQL engine.
 type SQLEngineConfig struct {
-	Catalog       catalog.Catalog
-	Versions      planner.SchemaVersionProvider
-	TableManager  TableManager
-	Decoder       planner.RowDecoder
-	PlanCache     *planner.PlanCache
-	TxManager     *tx.Manager
-	VacuumManager *vacuum.Manager
-	Logger        *slog.Logger
-	MaxBatchSize  int // Must be >= 1. 0 defaults to 1000.
+	Catalog         catalog.Catalog
+	Versions        planner.SchemaVersionProvider
+	TableManager    TableManager
+	Decoder         planner.RowDecoder
+	PlanCache       *planner.PlanCache
+	TxManager       *tx.Manager
+	VacuumManager   *vacuum.Manager
+	Logger          *slog.Logger
+	MaxBatchSize    int // Must be >= 1. 0 defaults to 1000.
+	MaxMutationRows int // 0 defaults to 1000. -1 disables the guard.
 }
 
 // NewSQLEngine creates a new SQL engine. Returns error if critical deps are nil.
@@ -89,16 +91,21 @@ func NewSQLEngine(cfg SQLEngineConfig) (*SQLEngine, error) {
 	if mb <= 0 {
 		mb = 1000
 	}
+	mmr := cfg.MaxMutationRows
+	if mmr == 0 {
+		mmr = 1000
+	}
 	return &SQLEngine{
-		catalog:      cfg.Catalog,
-		versions:     cfg.Versions,
-		tables:       cfg.TableManager,
-		decoder:      cfg.Decoder,
-		cache:        cfg.PlanCache,
-		txm:          cfg.TxManager,
-		vacuum:       cfg.VacuumManager,
-		log:          cfg.Logger,
-		maxBatchSize: mb,
+		catalog:         cfg.Catalog,
+		versions:        cfg.Versions,
+		tables:          cfg.TableManager,
+		decoder:         cfg.Decoder,
+		cache:           cfg.PlanCache,
+		txm:             cfg.TxManager,
+		vacuum:          cfg.VacuumManager,
+		log:             cfg.Logger,
+		maxBatchSize:    mb,
+		maxMutationRows: mmr,
 	}, nil
 }
 

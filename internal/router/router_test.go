@@ -96,8 +96,8 @@ func TestRoute_Select(t *testing.T) {
 func TestRoute_Unsupported(t *testing.T) {
 	r := New(&mockCatalog{tables: map[string]catalog.TableInfo{}, permOk: true})
 	p, _ := sqlparser.New()
-	// ALTER TABLE is still unsupported.
-	stmt, _ := p.Parse("ALTER TABLE users ADD COLUMN x int")
+	// SHOW DATABASES is unsupported.
+	stmt, _ := p.Parse("SHOW DATABASES")
 	_, err := r.Route(context.Background(), 1, stmt)
 	if err != ErrUnsupportedStatement {
 		t.Errorf("got %v, want ErrUnsupportedStatement", err)
