@@ -59,6 +59,7 @@ func (m *mockCatalog) CheckPermission(ctx context.Context, uid, tid uint64, a ca
 func (m *mockCatalog) GetSchemaHistory(ctx context.Context, name string) ([]catalog.SchemaHistoryEntry, error) {
 	return nil, nil
 }
+func (m *mockCatalog) SchemaVersion() uint64 { return 1 }
 
 func TestRoute_Select(t *testing.T) {
 	cat := &mockCatalog{

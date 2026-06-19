@@ -10,6 +10,12 @@ import (
 
 const systemUserID uint64 = 0
 
+func (c *catalog) SchemaVersion() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.schemaVersion
+}
+
 func (c *catalog) Start(ctx context.Context) error {
 	c.mu.Lock()
 	if c.started {
@@ -134,6 +140,7 @@ func (c *catalog) CreateTable(ctx context.Context, engineName, tableName string,
 	c.cache.nextTableID++
 	c.cache.nextHistoryID++
 	c.cache.nextAuditLogID++
+	c.schemaVersion++
 	c.mu.Unlock()
 	return nil
 }
@@ -184,6 +191,7 @@ func (c *catalog) DropTable(ctx context.Context, tableName string) error {
 	delete(c.cache.tables, tableName)
 	c.cache.nextHistoryID++
 	c.cache.nextAuditLogID++
+	c.schemaVersion++
 	c.mu.Unlock()
 	return nil
 }

@@ -203,6 +203,9 @@ type Catalog interface {
 
 	// Enterprise schema history.
 	GetSchemaHistory(ctx context.Context, tableName string) ([]SchemaHistoryEntry, error)
+
+	// SchemaVersion returns the current DDL version counter.
+	SchemaVersion() uint64
 }
 
 // Sentinel errors.
@@ -248,6 +251,8 @@ type catalog struct {
 	userRolesHandle heap.Table
 	historyHandle   heap.Table
 	auditHandle     heap.Table
+
+	schemaVersion uint64
 }
 
 // New creates a new Catalog backed by the given Heap.
