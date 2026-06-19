@@ -24,8 +24,10 @@ const (
 
 // Column describes a single column in a schema.
 type Column struct {
-	Name string
-	Type Type
+	Name         string
+	Type         Type
+	NotNull      bool   // If true, NULL values rejected at insert time.
+	DefaultValue *Datum // If non-nil, applied when column omitted from INSERT list.
 }
 
 // Schema describes the column layout of a row set.

@@ -29,8 +29,6 @@ import (
 var (
 	ErrNilSchemaVersionProvider = errors.New("sql engine: nil schema version provider")
 	ErrNilPlanCache             = errors.New("sql engine: nil plan cache")
-	ErrNilLogger                = errors.New("sql engine: nil logger")
-	ErrNilTxManager             = errors.New("sql engine: nil tx manager")
 	ErrNilVacuumManager         = errors.New("sql engine: nil vacuum manager")
 	ErrTableExists              = errors.New("sql engine: table already exists")
 	ErrEmptySchema              = errors.New("sql engine: empty schema (zero columns)")
@@ -40,65 +38,84 @@ var (
 
 // SQLEngine implements engine.Engine for SQL queries and DDL.
 type SQLEngine struct {
-	catalog  catalog.Catalog
-	versions planner.SchemaVersionProvider
-	tables   TableManager
-	decoder  planner.RowDecoder
-	cache    *planner.PlanCache
-	txm      *tx.Manager
-	vacuum   *vacuum.Manager
-	log      *slog.Logger
+	catalog       catalog.Catalog
+	versions      planner.SchemaVersionProvider
+	tables        TableManager
+	decoder       planner.RowDecoder
+	cache         *planner.PlanCache
+	txm           *tx.Manager
+	vacuum        *vacuum.Manager
+	log           *slog.Logger
+	maxBatchSize  int
+}
+
+// SQLEngineConfig holds all injectable dependencies for the SQL engine.
+type SQLEngineConfig struct {
+	Catalog       catalog.Catalog
+	Versions      planner.SchemaVersionProvider
+	TableManager  TableManager
+	Decoder       planner.RowDecoder
+	PlanCache     *planner.PlanCache
+	TxManager     *tx.Manager
+	VacuumManager *vacuum.Manager
+	Logger        *slog.Logger
+	MaxBatchSize  int // Must be >= 1. 0 defaults to 1000.
 }
 
 // NewSQLEngine creates a new SQL engine. Returns error if critical deps are nil.
-func NewSQLEngine(
-	cat catalog.Catalog,
-	versions planner.SchemaVersionProvider,
-	tables TableManager,
-	decoder planner.RowDecoder,
-	cache *planner.PlanCache,
-	txm *tx.Manager,
-	vac *vacuum.Manager,
-	log *slog.Logger,
-) (*SQLEngine, error) {
-	if versions == nil {
-		return nil, ErrNilSchemaVersionProvider
+func NewSQLEngine(cfg SQLEngineConfig) (*SQLEngine, error) {
+	if cfg.Catalog == nil {
+		return nil, ErrNilCatalog
 	}
-	if cache == nil {
+	if cfg.TableManager == nil {
+		return nil, ErrNilTableRegistry
+	}
+	if cfg.PlanCache == nil {
 		return nil, ErrNilPlanCache
 	}
-	if log == nil {
+	if cfg.Logger == nil {
 		return nil, ErrNilLogger
 	}
-	if txm == nil {
+	if cfg.TxManager == nil {
 		return nil, ErrNilTxManager
 	}
-	if vac == nil {
+	if cfg.VacuumManager == nil {
 		return nil, ErrNilVacuumManager
 	}
+	if cfg.Versions == nil {
+		return nil, ErrNilSchemaVersionProvider
+	}
+	mb := cfg.MaxBatchSize
+	if mb <= 0 {
+		mb = 1000
+	}
 	return &SQLEngine{
-		catalog:  cat,
-		versions: versions,
-		tables:   tables,
-		decoder:  decoder,
-		cache:    cache,
-		txm:      txm,
-		vacuum:   vac,
-		log:      log,
+		catalog:      cfg.Catalog,
+		versions:     cfg.Versions,
+		tables:       cfg.TableManager,
+		decoder:      cfg.Decoder,
+		cache:        cfg.PlanCache,
+		txm:          cfg.TxManager,
+		vacuum:       cfg.VacuumManager,
+		log:          cfg.Logger,
+		maxBatchSize: mb,
 	}, nil
 }
 
 // Name returns the engine identifier.
 func (e *SQLEngine) Name() string { return "sql" }
 
-// Execute dispatches based on statement type: SELECT uses the cache-first
-// planner flow; DDL executes table creation or removal; INSERT appends rows.
+// Execute dispatches based on statement type.
+// DML statements (INSERT, UPDATE, DELETE) are handled BEFORE the plan cache
+// lookup. DML never interacts with the plan cache — no Lookup(), no Store().
+// This is enforced by code structure: the DML arm is above the SELECT path.
 func (e *SQLEngine) Execute(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 	// Allocate WriteTxID exactly once for DML and DDL.
 	if req.Stmt.Type() == sqlparser.StmtInsert || req.Stmt.Type() == sqlparser.StmtDDL {
 		req.TxContext.WriteTxID = e.txm.NextWriteTx()
 	}
 
+	// DML: handled above the plan cache (never cached).
 	switch req.Stmt.Type() {
 	case sqlparser.StmtSelect:
 		return e.executeSelect(ctx, req)

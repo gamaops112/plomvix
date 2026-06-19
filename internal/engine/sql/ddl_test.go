@@ -63,7 +63,16 @@ func newTestSQLEngine(t *testing.T) (*SQLEngine, Catalog, catalog.UserInfo, func
 	dec := NewRowDecoder()
 	pc := planner.NewPlanCache(16)
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	eng, err := NewSQLEngine(cat, cat, tm, dec, pc, txm, vac, log)
+	eng, err := NewSQLEngine(SQLEngineConfig{
+		Catalog:       cat,
+		Versions:      cat,
+		TableManager:  tm,
+		Decoder:       dec,
+		PlanCache:     pc,
+		TxManager:     txm,
+		VacuumManager: vac,
+		Logger:        log,
+	})
 	if err != nil {
 		t.Fatalf("NewSQLEngine: %v", err)
 	}
@@ -299,7 +308,16 @@ func TestDDL_PermissionDenied(t *testing.T) {
 	dec := NewRowDecoder()
 	pc := planner.NewPlanCache(16)
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	eng, err := NewSQLEngine(cat, cat, tm, dec, pc, txm, vac, log)
+	eng, err := NewSQLEngine(SQLEngineConfig{
+		Catalog:       cat,
+		Versions:      cat,
+		TableManager:  tm,
+		Decoder:       dec,
+		PlanCache:     pc,
+		TxManager:     txm,
+		VacuumManager: vac,
+		Logger:        log,
+	})
 	if err != nil {
 		t.Fatalf("NewSQLEngine: %v", err)
 	}

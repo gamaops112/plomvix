@@ -139,8 +139,8 @@ func TestDML_InsertDuplicateColumn(t *testing.T) {
 	}
 }
 
-// TestDML_InsertBatchUnsupported validates batch insert rejection.
-func TestDML_InsertBatchUnsupported(t *testing.T) {
+// TestDML_InsertBatch validates multi-row batch INSERT.
+func TestDML_InsertBatch(t *testing.T) {
 	eng, _, adminUI, cleanup := newTestSQLEngine(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -152,9 +152,12 @@ func TestDML_InsertBatchUnsupported(t *testing.T) {
 	}
 
 	insertStmt := parseStmt(t, "INSERT INTO t7 VALUES (1), (2)")
-	_, err = eng.Execute(ctx, &engine.Request{Stmt: insertStmt, UserID: adminUI.UserID})
-	if err == nil {
-		t.Fatal("expected batch insert unsupported error")
+	result, err := eng.Execute(ctx, &engine.Request{Stmt: insertStmt, UserID: adminUI.UserID})
+	if err != nil {
+		t.Fatalf("batch INSERT: %v", err)
+	}
+	if result.RowsAffected != 2 {
+		t.Errorf("RowsAffected: got %d, want 2", result.RowsAffected)
 	}
 }
 

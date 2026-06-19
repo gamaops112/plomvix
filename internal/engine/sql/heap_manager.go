@@ -35,26 +35,28 @@ type heapManager struct {
 	store   kv.KVStore
 	dataDir string
 	heaps   map[uint64]heap.Table
+	adapters map[uint64]*tableHeapAdapter
 }
 
 // NewHeapManager creates a new TableManager.
 func NewHeapManager(store kv.KVStore, dataDir string) TableManager {
 	return &heapManager{
-		store:   store,
-		dataDir: dataDir,
-		heaps:   make(map[uint64]heap.Table),
+		store:    store,
+		dataDir:  dataDir,
+		heaps:    make(map[uint64]heap.Table),
+		adapters: make(map[uint64]*tableHeapAdapter),
 	}
 }
 
 // GetTableHeap returns the planner.TableHeap for a given table ID.
 func (m *heapManager) GetTableHeap(tableID uint64) (planner.TableHeap, error) {
 	m.mu.RLock()
-	t, ok := m.heaps[tableID]
+	adapter, ok := m.adapters[tableID]
 	m.mu.RUnlock()
 	if !ok {
 		return nil, planner.ErrTableHeapNotFound
 	}
-	return &tableHeapAdapter{t: t}, nil
+	return adapter, nil
 }
 
 // CreateTableHeap validates the schema and opens a new physical heap table.
@@ -72,8 +74,10 @@ func (m *heapManager) CreateTableHeap(ctx context.Context, tableID uint64, schem
 		return nil, "", err
 	}
 	m.heaps[tableID] = t
+	adapter := &tableHeapAdapter{t: t}
+	m.adapters[tableID] = adapter
 	path := m.heapPath(tableID)
-	return &tableHeapAdapter{t: t}, path, nil
+	return adapter, path, nil
 }
 
 // HeapPath returns the deterministic file path for a table ID.
@@ -93,7 +97,9 @@ func (m *heapManager) RemoveHeap(tableID uint64) error {
 
 // tableHeapAdapter wraps a heap.Table to satisfy planner.TableHeap.
 type tableHeapAdapter struct {
-	t heap.Table
+	t             heap.Table
+	mu            sync.Mutex
+	lastWriteTxID uint64
 }
 
 func (a *tableHeapAdapter) Scan(ctx context.Context, tx engine.TxContext) (planner.HeapScanIterator, error) {
@@ -111,6 +117,70 @@ func (a *tableHeapAdapter) Insert(ctx context.Context, tx engine.TxContext, row 
 		vals[i] = d.Value
 	}
 	return a.t.Insert(ctx, heap.Tx{ID: tx.WriteTxID}, vals)
+}
+
+// InsertBatch acquires the write lock once, validates WriteTxID monotonicity,
+// appends all rows, and commits lastWriteTxID. Returns (rowsAffected, error).
+func (a *tableHeapAdapter) InsertBatch(ctx context.Context, tx engine.TxContext, rows []engine.Row) (int, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// WriteTxID monotonic guard: tx.WriteTxID must be > lastWriteTxID.
+	if tx.WriteTxID <= a.lastWriteTxID {
+		return 0, ErrTxConflict
+	}
+	heapTx := heap.Tx{ID: tx.WriteTxID}
+	for _, row := range rows {
+		vals := make([]any, len(row))
+		for i, d := range row {
+			vals[i] = d.Value
+		}
+		if err := a.t.Insert(ctx, heapTx, vals); err != nil {
+			return 0, err
+		}
+	}
+	a.lastWriteTxID = tx.WriteTxID
+	return len(rows), nil
+}
+
+// BeginInsertStream acquires the write lock, validates WriteTxID, and returns
+// a stream writer for row-by-row appending.
+func (a *tableHeapAdapter) BeginInsertStream(ctx context.Context, tx engine.TxContext) (InsertStream, error) {
+	a.mu.Lock()
+	if tx.WriteTxID <= a.lastWriteTxID {
+		a.mu.Unlock()
+		return nil, ErrTxConflict
+	}
+	return &heapInsertStream{a: a, heapTx: heap.Tx{ID: tx.WriteTxID}, writeTxID: tx.WriteTxID}, nil
+}
+
+// heapInsertStream implements InsertStream for heap-backed tables.
+type heapInsertStream struct {
+	a         *tableHeapAdapter
+	heapTx    heap.Tx
+	writeTxID uint64
+	aborted   bool
+}
+
+func (s *heapInsertStream) Append(ctx context.Context, row engine.Row) error {
+	vals := make([]any, len(row))
+	for i, d := range row {
+		vals[i] = d.Value
+	}
+	return s.a.t.Insert(ctx, s.heapTx, vals)
+}
+
+func (s *heapInsertStream) Commit() error {
+	s.a.lastWriteTxID = s.writeTxID
+	s.a.mu.Unlock()
+	return nil
+}
+
+func (s *heapInsertStream) Abort() error {
+	if !s.aborted {
+		s.aborted = true
+		s.a.mu.Unlock()
+	}
+	return nil
 }
 
 var _ InsertableTableHeap = (*tableHeapAdapter)(nil)
