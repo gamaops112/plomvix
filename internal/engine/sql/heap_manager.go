@@ -31,10 +31,10 @@ type TableManager interface {
 
 // heapManager implements TableManager backed by an on-disk KVStore.
 type heapManager struct {
-	mu      sync.RWMutex
-	store   kv.KVStore
-	dataDir string
-	heaps   map[uint64]heap.Table
+	mu       sync.RWMutex
+	store    kv.KVStore
+	dataDir  string
+	heaps    map[uint64]heap.Table
 	adapters map[uint64]*tableHeapAdapter
 }
 

@@ -38,15 +38,15 @@ var (
 
 // SQLEngine implements engine.Engine for SQL queries and DDL.
 type SQLEngine struct {
-	catalog       catalog.Catalog
-	versions      planner.SchemaVersionProvider
-	tables        TableManager
-	decoder       planner.RowDecoder
-	cache         *planner.PlanCache
-	txm           *tx.Manager
-	vacuum        *vacuum.Manager
-	log           *slog.Logger
-	maxBatchSize  int
+	catalog      catalog.Catalog
+	versions     planner.SchemaVersionProvider
+	tables       TableManager
+	decoder      planner.RowDecoder
+	cache        *planner.PlanCache
+	txm          *tx.Manager
+	vacuum       *vacuum.Manager
+	log          *slog.Logger
+	maxBatchSize int
 }
 
 // SQLEngineConfig holds all injectable dependencies for the SQL engine.

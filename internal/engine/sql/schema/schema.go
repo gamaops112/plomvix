@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	flagNotNull     byte = 0x01
-	flagHasDefault  byte = 0x02
+	flagNotNull    byte = 0x01
+	flagHasDefault byte = 0x02
 )
 
 // Encode serializes an engine.Schema into a binary payload.
