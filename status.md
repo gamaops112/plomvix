@@ -23,10 +23,10 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 | | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Done** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
 | **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | ✅ **Done** | PostgreSQL Wire Protocol v3.0 (Simple & Extended). |
 | | 32 | System Composition & Configuration Wiring | `internal/config`, `.../runtime` | ✅ **Done** | Compiles all components with lifecycle hooks. |
-| **7. Pluggable Engines** | 33 | Metrics Engine Setup (Ingestion & Query) | `internal/engine/metrics` | ✅ **Ready for Coding** | Flat page time-series append-only log and query scans. |
-| | 34 | Metrics Engine Enterprise (Compression & Rollups) | `internal/engine/metrics` | ✅ **Ready for Coding** | Gorilla compression, inverted tag indexing, and downsampling. |
-| | 35 | Logs Engine Setup (Basic Ingestion & Search) | `internal/engine/logs` | ✅ **Ready for Coding** | Flat page schema-less log storage and text substring scans. |
-| | 36 | Logs Engine Enterprise (Compression & Retention) | `internal/engine/logs` | ✅ **Ready for Coding** | ZSTD/LZ4 compression, inverted token indexes, and retention sweep. |
+| **7. Pluggable Engines** | 33 | Metrics Engine Setup (Ingestion & Query) | `internal/engine/metrics` | ✅ **Done** | Flat page time-series append-only log and query scans. |
+| | 34 | Metrics Engine Enterprise (Compression & Rollups) | `internal/engine/metrics` | ✅ **Done** | Gorilla compression, inverted tag indexing, and downsampling. |
+| | 35 | Logs Engine Setup (Basic Ingestion & Search) | `internal/engine/logs` | ✅ **Done** | Flat page schema-less log storage and text substring scans. |
+| | 36 | Logs Engine Enterprise (Compression & Retention) | `internal/engine/logs` | ✅ **Done** | DEFLATE compression, inverted token indexes, and retention sweep. |
 
 
 ***

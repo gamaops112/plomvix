@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/plomvix/plomvix/internal/storage/pager"
 )
@@ -56,17 +57,32 @@ func (r *LogRecord) serializedSize() int {
 }
 
 // LogsStore is a flat page-based append-only log store.
+// Enterprise tier adds a sync.RWMutex for concurrent ingestion,
+// a block directory for retention tracking, and a token index
+// for full-text search.
 type LogsStore struct {
 	pager         pager.Pager
 	currentPageID uint64
 	currentBody   []byte // cached copy of current page body
 	opened        bool
+
+	// Enterprise fields.
+	mu             sync.RWMutex
+	blockDirectory []BlockDirectoryEntry
+	tokenIndex     *TokenIndex
 }
 
 // NewStore creates a LogsStore backed by the given pager.
 func NewStore(pg pager.Pager) *LogsStore {
+	return NewStoreWithIndex(pg, nil)
+}
+
+// NewStoreWithIndex creates a LogsStore with an optional TokenIndex
+// for enterprise full-text search queries.
+func NewStoreWithIndex(pg pager.Pager, idx *TokenIndex) *LogsStore {
 	return &LogsStore{
-		pager: pg,
+		pager:      pg,
+		tokenIndex: idx,
 	}
 }
 
@@ -182,6 +198,19 @@ func (s *LogsStore) AppendLog(ctx context.Context, rec LogRecord) error {
 	// Update header.
 	s.writeHeader(numRecs+1, uint32(offset))
 
+	// Enterprise: index tokens for full-text search.
+	if s.tokenIndex != nil && rec.Body != "" {
+		tokens := Tokenize(rec.Body)
+		loc := RecordLocator{
+			PageID:    s.currentPageID,
+			RecordIdx: numRecs,
+			Timestamp: rec.Timestamp,
+		}
+		for _, tok := range tokens {
+			s.tokenIndex.Insert(tok, loc)
+		}
+	}
+
 	return s.flushPage(ctx)
 }
 
@@ -202,6 +231,10 @@ func (s *LogsStore) ScanRange(ctx context.Context, start, end int64, bodyFilter 
 	for pageID := uint64(pager.FirstDataPageID); pageID < pageCount; pageID++ {
 		body, err := s.pager.ReadPage(ctx, pageID)
 		if err != nil {
+			// Enterprise: tombstone tolerance — silently skip freed pages.
+			if errors.Is(err, pager.ErrInvalidPageID) {
+				continue
+			}
 			return nil, fmt.Errorf("logs store: read page %d: %w", pageID, err)
 		}
 		recs := decodeLogPage(body)
@@ -219,6 +252,83 @@ func (s *LogsStore) ScanRange(ctx context.Context, start, end int64, bodyFilter 
 		}
 	}
 	return results, nil
+}
+
+// ScanRangeWithIndex uses the token index to find matching records
+// instead of scanning all pages. Falls back to full scan if no index
+// is available or if no tokens are provided.
+func (s *LogsStore) ScanRangeWithIndex(ctx context.Context, start, end int64, tokens []string) ([]LogRecord, error) {
+	if !s.opened {
+		return nil, ErrStoreNotOpen
+	}
+
+	// If we have an index and tokens, use it.
+	if s.tokenIndex != nil && len(tokens) > 0 {
+		locs := s.tokenIndex.SearchAll(tokens)
+		if locs != nil {
+			return s.readLogLocations(ctx, locs, start, end)
+		}
+		// Index miss: return empty, not a full scan.
+		return nil, nil
+	}
+	// Fallback: full scan with substring filter.
+	bodyFilter := ""
+	if len(tokens) == 1 {
+		bodyFilter = tokens[0]
+	}
+	return s.ScanRange(ctx, start, end, bodyFilter)
+}
+
+// readLogLocations reads specific log records from pages by locator.
+func (s *LogsStore) readLogLocations(ctx context.Context, locs []RecordLocator, start, end int64) ([]LogRecord, error) {
+	// Group locators by page to minimize reads.
+	pageLocs := make(map[uint64][]uint32)
+	for _, loc := range locs {
+		pageLocs[loc.PageID] = append(pageLocs[loc.PageID], loc.RecordIdx)
+	}
+
+	var results []LogRecord
+	for pageID, indexes := range pageLocs {
+		body, err := s.pager.ReadPage(ctx, pageID)
+		if err != nil {
+			// Tombstone tolerance: skip freed pages.
+			continue
+		}
+		recs := decodeLogPage(body)
+		for _, idx := range indexes {
+			if int(idx) >= len(recs) {
+				continue
+			}
+			rec := recs[idx]
+			if start != 0 && rec.Timestamp < start {
+				continue
+			}
+			if end != 0 && rec.Timestamp > end {
+				continue
+			}
+			results = append(results, rec)
+		}
+	}
+	return results, nil
+}
+
+// TokenIndex returns the store's token index (for testing/wiring).
+func (s *LogsStore) TokenIndex() *TokenIndex { return s.tokenIndex }
+
+// BlockDirectory returns a copy of the block directory (for testing).
+func (s *LogsStore) BlockDirectory() []BlockDirectoryEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cp := make([]BlockDirectoryEntry, len(s.blockDirectory))
+	copy(cp, s.blockDirectory)
+	return cp
+}
+
+// AddBlockDirectoryEntry appends a block directory entry (for compressed blocks).
+func (s *LogsStore) AddBlockDirectoryEntry(entry BlockDirectoryEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blockDirectory = append(s.blockDirectory, entry)
 }
 
 // writeHeader writes the page header fields into the in-memory body.

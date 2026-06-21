@@ -182,10 +182,15 @@ func New(opts Options) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: register metrics engine: %w", err)
 	}
 
-	// 4c. Initialize Logs Engine (append-only text log storage).
+	// 4c. Initialize Logs Engine (append-only text log storage) with enterprise
+	//     token index and retention worker.
 	logsPager := pager.New(cfg.Store.LogsDBPath)
-	logsStore := logs.NewStore(logsPager)
-	logsEngine := logs.NewLogsEngine(cat, logsStore)
+	logsTokenIndex := logs.NewTokenIndex(int64(cfg.Store.LogIndexMemoryMB) * 1024 * 1024)
+	logsStore := logs.NewStoreWithIndex(logsPager, logsTokenIndex)
+	logsRetentionCfg := logs.DefaultRetentionConfig()
+	logsRetentionCfg.RetentionDays = cfg.Store.LogsRetentionDays
+	logsRetention := logs.NewRetentionWorker(logsRetentionCfg, logsStore, logsPager)
+	logsEngine := logs.NewLogsEngineWithIndex(cat, logsStore, logsTokenIndex, logsRetention)
 	if err := cat.RegisterEngine(logsEngine); err != nil {
 		return nil, fmt.Errorf("runtime: register logs engine: %w", err)
 	}
@@ -220,6 +225,11 @@ func New(opts Options) (*Runtime, error) {
 	}
 	if err := manager.Register(newPagerComponent("logs.pager", logsPager)); err != nil {
 		return nil, err
+	}
+	if logsEngine.Retention() != nil {
+		if err := manager.Register(logsEngine.Retention()); err != nil {
+			return nil, fmt.Errorf("runtime: register logs retention: %w", err)
+		}
 	}
 	if rm := metricsEngine.Rollup(); rm != nil {
 		if err := manager.Register(rm); err != nil {

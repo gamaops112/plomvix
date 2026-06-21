@@ -27,15 +27,25 @@ var (
 
 // LogsEngine is a pluggable log query execution engine.
 type LogsEngine struct {
-	catalog catalog.Catalog
-	store   *LogsStore
+	catalog    catalog.Catalog
+	store      *LogsStore
+	tokenIndex *TokenIndex      // enterprise: inverted token index for full-text search
+	retention  *RetentionWorker // enterprise: background log retention
 }
 
 // NewLogsEngine creates a new LogsEngine.
 func NewLogsEngine(cat catalog.Catalog, store *LogsStore) *LogsEngine {
+	return NewLogsEngineWithIndex(cat, store, nil, nil)
+}
+
+// NewLogsEngineWithIndex creates a new LogsEngine with enterprise
+// token index and retention worker support.
+func NewLogsEngineWithIndex(cat catalog.Catalog, store *LogsStore, idx *TokenIndex, retention *RetentionWorker) *LogsEngine {
 	return &LogsEngine{
-		catalog: cat,
-		store:   store,
+		catalog:    cat,
+		store:      store,
+		tokenIndex: idx,
+		retention:  retention,
 	}
 }
 
@@ -44,6 +54,12 @@ func (e *LogsEngine) Name() string { return "logs" }
 
 // Store returns the underlying store (for testing).
 func (e *LogsEngine) Store() *LogsStore { return e.store }
+
+// TokenIndex returns the token index (for testing/wiring).
+func (e *LogsEngine) TokenIndex() *TokenIndex { return e.tokenIndex }
+
+// Retention returns the retention worker (for testing/wiring).
+func (e *LogsEngine) Retention() *RetentionWorker { return e.retention }
 
 // ValidateSchema enforces that the schema has time, severity, attributes, and body columns.
 func (e *LogsEngine) ValidateSchema(schemaJSON []byte) error {
@@ -225,6 +241,7 @@ func parseLogPayload(raw string) (body string, severity uint8, attributes string
 
 // executeSelect handles SELECT ... FROM ... WHERE ... for logs.
 // Supports time range filtering and body LIKE substring matching.
+// Enterprise: uses the token index for fast full-text lookup.
 func (e *LogsEngine) executeSelect(ctx context.Context, req *engine.Request) (*engine.Result, error) {
 	sel, ok := req.Stmt.RawAST().(*vitess.Select)
 	if !ok {
@@ -237,7 +254,14 @@ func (e *LogsEngine) executeSelect(ctx context.Context, req *engine.Request) (*e
 		return nil, err
 	}
 
-	records, err := e.store.ScanRange(ctx, start, end, bodyFilter)
+	var records []LogRecord
+	if e.tokenIndex != nil && bodyFilter != "" {
+		// Enterprise: tokenize and use indexed search.
+		tokens := Tokenize(bodyFilter)
+		records, err = e.store.ScanRangeWithIndex(ctx, start, end, tokens)
+	} else {
+		records, err = e.store.ScanRange(ctx, start, end, bodyFilter)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("logs engine: scan range: %w", err)
 	}
