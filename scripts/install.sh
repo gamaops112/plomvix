@@ -30,51 +30,32 @@ case "$ARCH" in
     ;;
 esac
 
-# 2. Retrieve Release Binary from GitHub
-REPO="${GITHUB_REPO:-gamaops112/plomvix}"
-VERSION="${VERSION:-latest}"
+# 2. Compile Plomvix Locally
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_SCRIPT="$SCRIPT_DIR/build.sh"
 
-echo "Locating Plomvix release ($VERSION) from GitHub repository: $REPO..."
-
-# Resolve Release Tag Name
-if [ "$VERSION" = "latest" ]; then
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "Error: curl is required to fetch latest release metadata from GitHub API." >&2
-    exit 1
-  fi
-  TAG_NAME=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-  if [ -z "$TAG_NAME" ]; then
-    echo "Error: Could not retrieve latest release tag from GitHub API for '$REPO'." >&2
-    echo "Check network connection or ensure the repository has public releases." >&2
-    exit 1
-  fi
-else
-  TAG_NAME="$VERSION"
-fi
-
-DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG_NAME/plomvix-linux-$ARCH_SUFFIX"
-echo "Downloading binary from: $DOWNLOAD_URL"
-
-# Download to temp path
-TEMP_BINARY="/tmp/plomvix_download"
-rm -f "$TEMP_BINARY"
-
-if command -v curl >/dev/null 2>&1; then
-  if ! curl -L -f -o "$TEMP_BINARY" "$DOWNLOAD_URL"; then
-    echo "Error: Failed to download binary from $DOWNLOAD_URL" >&2
-    exit 1
-  fi
-elif command -v wget >/dev/null 2>&1; then
-  if ! wget -q -O "$TEMP_BINARY" "$DOWNLOAD_URL"; then
-    echo "Error: Failed to download binary from $DOWNLOAD_URL" >&2
-    exit 1
-  fi
-else
-  echo "Error: Neither curl nor wget is installed. Cannot download Plomvix." >&2
+echo "Checking compiler dependencies..."
+if ! command -v go >/dev/null 2>&1; then
+  echo "Error: Go (golang) is required to compile Plomvix locally." >&2
+  echo "Please install Go (v1.21+) or ensure it is accessible in your current PATH." >&2
   exit 1
 fi
 
-chmod +x "$TEMP_BINARY"
+echo "Invoking build script to compile Plomvix locally..."
+if [ ! -f "$BUILD_SCRIPT" ]; then
+  echo "Error: Build script not found at '$BUILD_SCRIPT'." >&2
+  exit 1
+fi
+
+# Run the build script
+bash "$BUILD_SCRIPT"
+
+BINARY_SRC="$WORKSPACE_DIR/build/plomvix-linux-$ARCH_SUFFIX"
+if [ ! -f "$BINARY_SRC" ]; then
+  echo "Error: Compiled binary not found at '$BINARY_SRC'." >&2
+  exit 1
+fi
 
 # 3. Create System User and Group
 echo "Creating 'plomvix' system user and group..."
@@ -108,7 +89,7 @@ chmod -R 770 /var/lib/plomvix
 
 # 5. Install Binary
 echo "Installing binary to /usr/local/bin/plomvix..."
-mv "$TEMP_BINARY" /usr/local/bin/plomvix
+cp "$BINARY_SRC" /usr/local/bin/plomvix
 chmod 755 /usr/local/bin/plomvix
 
 # 6. Install Configuration File

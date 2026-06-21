@@ -230,24 +230,14 @@ func main() {
 
 ## 6. Installation & Service Setup
 
-Plomvix binaries are built automatically using GitHub Actions workflows and published as release assets.
-
 ### Automated Linux Service Installation
-The `install.sh` script automatically detects your CPU architecture (AMD64 or ARM64) and init system (Systemd or OpenRC), downloads the correct pre-compiled release binary directly from GitHub, and registers it as a service.
+The `install.sh` script automatically detects your host CPU architecture (AMD64 or ARM64) and init system (Systemd or OpenRC), invokes Go to compile Plomvix statically from local source, configures the `plomvix` system user/directories, and registers it as a daemon.
 
-Run the following command to download and execute the installer:
-
-```bash
-# Downloads and installs the latest stable release for your system
-curl -sSL https://raw.githubusercontent.com/gamaops112/plomvix/main/scripts/install.sh | sudo bash
-```
-
-#### Custom Repository or Version Overrides
-To download a specific version tag (e.g. `v1.0.1`) or install from a fork, override the environment variables:
+To run the installation:
 
 ```bash
-# Example: Install v1.0.1 from a custom GitHub repository fork
-sudo GITHUB_REPO="myfork/plomvix" VERSION="v1.0.1" ./scripts/install.sh
+# Execute the installer from the workspace root (requires root privileges)
+sudo ./scripts/install.sh
 ```
 
 ### Managed Services Configuration
