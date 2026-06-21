@@ -15,6 +15,7 @@ import (
 
 	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/config"
+	"github.com/plomvix/plomvix/internal/engine/logs"
 	"github.com/plomvix/plomvix/internal/engine/metrics"
 	"github.com/plomvix/plomvix/internal/engine/sql"
 	"github.com/plomvix/plomvix/internal/engine/sql/kv"
@@ -181,10 +182,19 @@ func New(opts Options) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: register metrics engine: %w", err)
 	}
 
+	// 4c. Initialize Logs Engine (append-only text log storage).
+	logsPager := pager.New(cfg.Store.LogsDBPath)
+	logsStore := logs.NewStore(logsPager)
+	logsEngine := logs.NewLogsEngine(cat, logsStore)
+	if err := cat.RegisterEngine(logsEngine); err != nil {
+		return nil, fmt.Errorf("runtime: register logs engine: %w", err)
+	}
+
 	// 5. Initialize Router & SQL Parser.
 	routerService := router.New(cat)
 	routerService.RegisterEngine(sqlEngine)
 	routerService.RegisterEngine(metricsEngine)
+	routerService.RegisterEngine(logsEngine)
 	parserService, err := sqlparser.New()
 	if err != nil {
 		return nil, fmt.Errorf("runtime: create parser: %w", err)
@@ -206,6 +216,9 @@ func New(opts Options) (*Runtime, error) {
 		return nil, err
 	}
 	if err := manager.Register(newPagerComponent("metrics.pager", metricsPager)); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(newPagerComponent("logs.pager", logsPager)); err != nil {
 		return nil, err
 	}
 	if rm := metricsEngine.Rollup(); rm != nil {

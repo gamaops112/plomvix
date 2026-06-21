@@ -7,6 +7,7 @@ package router
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/engine"
@@ -124,6 +125,9 @@ func (r *Router) routeDDL(ctx context.Context, userID uint64, stmt sqlparser.Sta
 }
 
 // routeInsert dispatches INSERT to the owning engine with write permission check.
+// If the target table does not exist, it auto-creates it:
+//   - Tables with "log" in the name → logs engine
+//   - All other tables → metrics engine
 func (r *Router) routeInsert(ctx context.Context, userID uint64, stmt sqlparser.Statement) (*engine.Result, error) {
 	insert := stmt.RawInsert()
 	if insert == nil {
@@ -135,7 +139,17 @@ func (r *Router) routeInsert(ctx context.Context, userID uint64, stmt sqlparser.
 	}
 
 	info, err := r.catalog.GetTable(ctx, tableName)
-	if err != nil {
+	if errors.Is(err, catalog.ErrTableNotFound) {
+		// Auto-create table based on name heuristic.
+		engineName, schemaJSON := resolveAutoTable(tableName)
+		if err := r.catalog.CreateTable(ctx, engineName, tableName, schemaJSON); err != nil {
+			return nil, err
+		}
+		info, err = r.catalog.GetTable(ctx, tableName)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -157,6 +171,26 @@ func (r *Router) routeInsert(ctx context.Context, userID uint64, stmt sqlparser.
 		UserID:    userID,
 		TxContext: engine.TxContext{},
 	})
+}
+
+// resolveAutoTable determines which engine to use and which default schema
+// to apply for auto-created tables based on the table name.
+func resolveAutoTable(tableName string) (engineName string, schemaJSON []byte) {
+	lower := strings.ToLower(tableName)
+	if strings.Contains(lower, "log") {
+		return "logs", defaultLogsSchema()
+	}
+	return "metrics", defaultMetricsSchema()
+}
+
+// defaultLogsSchema returns the standard logs table schema.
+func defaultLogsSchema() []byte {
+	return []byte(`[{"name":"time","type":"int64"},{"name":"severity","type":"string"},{"name":"attributes","type":"string"},{"name":"body","type":"string"}]`)
+}
+
+// defaultMetricsSchema returns the standard metrics table schema.
+func defaultMetricsSchema() []byte {
+	return []byte(`[{"name":"time","type":"int64"},{"name":"tags","type":"string"},{"name":"metric_name","type":"string"},{"name":"value","type":"float64"}]`)
 }
 
 // routeUpdateDelete dispatches UPDATE/DELETE to the owning engine with write permission check.

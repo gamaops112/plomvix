@@ -23,6 +23,11 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 | | 30 | Sorting & Aggregation | `.../planner`, `.../exec` | ✅ **Done** | `ORDER BY`, `GROUP BY`, `LIMIT`. |
 | **6. Network Edge** | 31 | Wire Protocol / API Server | `internal/server` | ✅ **Done** | PostgreSQL Wire Protocol v3.0 (Simple & Extended). |
 | | 32 | System Composition & Configuration Wiring | `internal/config`, `.../runtime` | ✅ **Done** | Compiles all components with lifecycle hooks. |
+| **7. Pluggable Engines** | 33 | Metrics Engine Setup (Ingestion & Query) | `internal/engine/metrics` | ✅ **Ready for Coding** | Flat page time-series append-only log and query scans. |
+| | 34 | Metrics Engine Enterprise (Compression & Rollups) | `internal/engine/metrics` | ✅ **Ready for Coding** | Gorilla compression, inverted tag indexing, and downsampling. |
+| | 35 | Logs Engine Setup (Basic Ingestion & Search) | `internal/engine/logs` | ✅ **Ready for Coding** | Flat page schema-less log storage and text substring scans. |
+| | 36 | Logs Engine Enterprise (Compression & Retention) | `internal/engine/logs` | ✅ **Ready for Coding** | ZSTD/LZ4 compression, inverted token indexes, and retention sweep. |
+
 
 ***
 
@@ -38,5 +43,4 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 ***
 
 ### 🎯 Immediate Action Items & Future Milestones
-1. **🎉 Milestone Achieved:** The core relational SQL Engine is fully implemented, wired, and verified with custom storage and network protocol layers.
-2. **Future Pluggable Engines:** Design and implement pluggable Metrics and Logs engines leveraging the core runtime and storage interfaces established in this milestone.
+1. **Execute Plans 33, 34, 35 & 36 (Metrics & Logs Engines):** Hand the approved Metrics and Logs plans to the coding agent to build pluggable storage, Gorilla and ZSTD block compression, rollups, inverted indexes, and text search scans.
