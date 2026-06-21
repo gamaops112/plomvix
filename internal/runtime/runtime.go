@@ -172,10 +172,11 @@ func New(opts Options) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: register sql engine: %w", err)
 	}
 
-	// 4b. Initialize Metrics Engine (time-series).
+	// 4b. Initialize Metrics Engine (time-series) with enterprise tag index & rollup.
 	metricsPager := pager.New(cfg.Store.MetricsDBPath)
-	metricsStore := metrics.NewStore(metricsPager)
-	metricsEngine := metrics.NewMetricsEngine(cat, metricsStore)
+	tagIndex := metrics.NewTagIndex(metrics.DefaultTagIndexConfig())
+	metricsStore := metrics.NewStoreWithIndex(metricsPager, tagIndex)
+	metricsEngine := metrics.NewMetricsEngineWithIndex(cat, metricsStore, tagIndex, cfg.Store.RollupDBPath)
 	if err := cat.RegisterEngine(metricsEngine); err != nil {
 		return nil, fmt.Errorf("runtime: register metrics engine: %w", err)
 	}
@@ -206,6 +207,11 @@ func New(opts Options) (*Runtime, error) {
 	}
 	if err := manager.Register(newPagerComponent("metrics.pager", metricsPager)); err != nil {
 		return nil, err
+	}
+	if rm := metricsEngine.Rollup(); rm != nil {
+		if err := manager.Register(rm); err != nil {
+			return nil, fmt.Errorf("runtime: register metrics rollup: %w", err)
+		}
 	}
 	if err := manager.Register(&kvComponent{store: sharedKV}); err != nil {
 		return nil, err

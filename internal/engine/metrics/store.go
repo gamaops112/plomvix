@@ -54,12 +54,19 @@ type MetricsStore struct {
 	currentPageID uint64
 	currentBody   []byte // cached copy of current page body
 	opened        bool
+	tagIndex      *TagIndex // enterprise: inverted tag index for fast lookup
 }
 
 // NewStore creates a MetricsStore backed by the given pager.
 func NewStore(pg pager.Pager) *MetricsStore {
+	return NewStoreWithIndex(pg, nil)
+}
+// NewStoreWithIndex creates a MetricsStore with an optional TagIndex
+// for enterprise tag-filtered queries.
+func NewStoreWithIndex(pg pager.Pager, idx *TagIndex) *MetricsStore {
 	return &MetricsStore{
-		pager: pg,
+		pager:    pg,
+		tagIndex: idx,
 	}
 }
 
@@ -176,6 +183,16 @@ func (s *MetricsStore) AppendPoint(ctx context.Context, pt Point) error {
 	// Update header.
 	s.writeHeader(numPoints+1, uint32(offset))
 
+	// Enterprise: index tags for fast lookup.
+	if s.tagIndex != nil && pt.Tags != "" {
+		loc := RecordLocator{
+			PageID:    s.currentPageID,
+			Offset:    uint32(offset - pt.serializedSize()),
+			Timestamp: pt.Timestamp,
+		}
+		s.tagIndex.Insert(pt.Tags, loc)
+	}
+
 	return s.flushPage(ctx)
 }
 
@@ -207,6 +224,55 @@ func (s *MetricsStore) ScanRange(ctx context.Context, start, end int64, tags map
 				continue
 			}
 			results = append(results, pt)
+		}
+	}
+	return results, nil
+}
+
+// ScanRangeWithIndex uses the tag index to find matching records
+// instead of scanning all pages. Falls back to full scan if no index
+// is available or if no tags are specified.
+func (s *MetricsStore) ScanRangeWithIndex(ctx context.Context, start, end int64, tags map[string]string) ([]Point, error) {
+	if !s.opened {
+		return nil, ErrStoreNotOpen
+	}
+
+	// If we have an index and tag constraints, use it.
+	if s.tagIndex != nil && len(tags) > 0 {
+		locs := s.tagIndex.SearchAll(tags)
+		if locs != nil {
+			return s.readLocations(ctx, locs, start, end)
+		}
+	}
+	// Fallback: full scan.
+	return s.ScanRange(ctx, start, end, tags)
+}
+
+// readLocations reads specific record locations from pages.
+func (s *MetricsStore) readLocations(ctx context.Context, locs []RecordLocator, start, end int64) ([]Point, error) {
+	// Group locators by page to minimize reads.
+	pageLocs := make(map[uint64][]uint32)
+	for _, loc := range locs {
+		pageLocs[loc.PageID] = append(pageLocs[loc.PageID], loc.Offset)
+	}
+
+	var results []Point
+	for pageID, offsets := range pageLocs {
+		body, err := s.pager.ReadPage(ctx, pageID)
+		if err != nil {
+			continue
+		}
+		for _, off := range offsets {
+			if int(off) >= len(body) {
+				continue
+			}
+			pt, consumed := decodeRawPoint(body[off:])
+			if consumed == 0 {
+				continue
+			}
+			if pt.Timestamp >= start && (end == 0 || pt.Timestamp <= end) {
+				results = append(results, pt)
+			}
 		}
 	}
 	return results, nil

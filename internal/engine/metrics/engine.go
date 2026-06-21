@@ -28,20 +28,44 @@ var (
 
 // MetricsEngine is a pluggable time-series query execution engine.
 type MetricsEngine struct {
-	catalog catalog.Catalog
-	store   *MetricsStore
+	catalog  catalog.Catalog
+	store    *MetricsStore
+	index    *TagIndex      // enterprise: inverted tag index for fast lookups
+	rollup   *RollupManager // enterprise: background downsampling worker
+	rollupDB string         // path to rollup database file
 }
 
 // NewMetricsEngine creates a new MetricsEngine.
 func NewMetricsEngine(cat catalog.Catalog, store *MetricsStore) *MetricsEngine {
+	return NewMetricsEngineWithIndex(cat, store, nil, "")
+}
+
+// NewMetricsEngineWithIndex creates a new MetricsEngine with enterprise
+// tag index and rollup support.
+func NewMetricsEngineWithIndex(cat catalog.Catalog, store *MetricsStore, idx *TagIndex, rollupDBPath string) *MetricsEngine {
+	var rm *RollupManager
+	if rollupDBPath != "" && store != nil {
+		cfg := DefaultRollupConfig()
+		cfg.RollupDBPath = rollupDBPath
+		rm = NewRollupManager(store, cfg)
+	}
 	return &MetricsEngine{
-		catalog: cat,
-		store:   store,
+		catalog:  cat,
+		store:    store,
+		index:    idx,
+		rollup:   rm,
+		rollupDB: rollupDBPath,
 	}
 }
 
 // Name returns the engine identifier.
 func (e *MetricsEngine) Name() string { return "metrics" }
+
+// Index returns the tag index (for testing).
+func (e *MetricsEngine) Index() *TagIndex { return e.index }
+
+// Rollup returns the rollup manager (for testing).
+func (e *MetricsEngine) Rollup() *RollupManager { return e.rollup }
 
 // ValidateSchema enforces that the schema has a 'time' column and at least
 // one numeric metric value column.
@@ -179,7 +203,14 @@ func (e *MetricsEngine) executeSelect(ctx context.Context, req *engine.Request) 
 		return nil, ErrUnsupportedQuery
 	}
 
-	points, err := e.store.ScanRange(ctx, start, end, tags)
+	// Enterprise: use tag index for fast lookup if available.
+	var points []Point
+	var err error
+	if e.index != nil && len(tags) > 0 {
+		points, err = e.store.ScanRangeWithIndex(ctx, start, end, tags)
+	} else {
+		points, err = e.store.ScanRange(ctx, start, end, tags)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("metrics engine: scan range: %w", err)
 	}

@@ -42,6 +42,9 @@ func TestDefaultDataPath(t *testing.T) {
 	if cfg.Store.MetricsDBPath != "data/metrics.db" {
 		t.Errorf("default Store.MetricsDBPath = %q, want %q", cfg.Store.MetricsDBPath, "data/metrics.db")
 	}
+	if cfg.Store.RollupDBPath != "data/metrics_rollups.db" {
+		t.Errorf("default Store.RollupDBPath = %q, want %q", cfg.Store.RollupDBPath, "data/metrics_rollups.db")
+	}
 }
 
 func TestDefaultLoggerValues(t *testing.T) {
