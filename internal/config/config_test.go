@@ -39,6 +39,9 @@ func TestDefaultDataPath(t *testing.T) {
 	if cfg.Store.DBPath != "data/plomvix.db" {
 		t.Errorf("default Store.DBPath = %q, want %q", cfg.Store.DBPath, "data/plomvix.db")
 	}
+	if cfg.Store.MetricsDBPath != "data/metrics.db" {
+		t.Errorf("default Store.MetricsDBPath = %q, want %q", cfg.Store.MetricsDBPath, "data/metrics.db")
+	}
 }
 
 func TestDefaultLoggerValues(t *testing.T) {

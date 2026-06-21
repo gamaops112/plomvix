@@ -15,6 +15,7 @@ import (
 
 	"github.com/plomvix/plomvix/internal/catalog"
 	"github.com/plomvix/plomvix/internal/config"
+	"github.com/plomvix/plomvix/internal/engine/metrics"
 	"github.com/plomvix/plomvix/internal/engine/sql"
 	"github.com/plomvix/plomvix/internal/engine/sql/kv"
 	"github.com/plomvix/plomvix/internal/engine/sql/planner"
@@ -171,9 +172,18 @@ func New(opts Options) (*Runtime, error) {
 		return nil, fmt.Errorf("runtime: register sql engine: %w", err)
 	}
 
+	// 4b. Initialize Metrics Engine (time-series).
+	metricsPager := pager.New(cfg.Store.MetricsDBPath)
+	metricsStore := metrics.NewStore(metricsPager)
+	metricsEngine := metrics.NewMetricsEngine(cat, metricsStore)
+	if err := cat.RegisterEngine(metricsEngine); err != nil {
+		return nil, fmt.Errorf("runtime: register metrics engine: %w", err)
+	}
+
 	// 5. Initialize Router & SQL Parser.
 	routerService := router.New(cat)
 	routerService.RegisterEngine(sqlEngine)
+	routerService.RegisterEngine(metricsEngine)
 	parserService, err := sqlparser.New()
 	if err != nil {
 		return nil, fmt.Errorf("runtime: create parser: %w", err)
@@ -191,7 +201,10 @@ func New(opts Options) (*Runtime, error) {
 	// 7. Register components with lifecycle manager in dependency order.
 	manager := lifecycle.NewManager()
 	// Storage layer (start first, stop last).
-	if err := manager.Register(&pagerComponent{p: sharedPager}); err != nil {
+	if err := manager.Register(newPagerComponent("storage.pager", sharedPager)); err != nil {
+		return nil, err
+	}
+	if err := manager.Register(newPagerComponent("metrics.pager", metricsPager)); err != nil {
 		return nil, err
 	}
 	if err := manager.Register(&kvComponent{store: sharedKV}); err != nil {
@@ -273,10 +286,15 @@ func (r *Runtime) State() lifecycle.State {
 
 // pagerComponent wraps pager.Pager for lifecycle management.
 type pagerComponent struct {
-	p pager.Pager
+	p    pager.Pager
+	name string
 }
 
-func (c *pagerComponent) Name() string                    { return "storage.pager" }
+func newPagerComponent(name string, p pager.Pager) *pagerComponent {
+	return &pagerComponent{name: name, p: p}
+}
+
+func (c *pagerComponent) Name() string                    { return c.name }
 func (c *pagerComponent) Start(ctx context.Context) error { return c.p.Open(ctx) }
 func (c *pagerComponent) Stop(ctx context.Context) error  { return c.p.Close(ctx) }
 
