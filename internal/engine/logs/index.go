@@ -11,9 +11,9 @@ import (
 
 // RecordLocator identifies a specific log record within a page.
 type RecordLocator struct {
-	PageID     uint64
-	RecordIdx  uint32 // index within the page's record list
-	Timestamp  int64
+	PageID    uint64
+	RecordIdx uint32 // index within the page's record list
+	Timestamp int64
 }
 
 // TokenIndex is a memory-bounded inverted index mapping tokens to
