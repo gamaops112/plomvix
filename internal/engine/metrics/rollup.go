@@ -18,7 +18,7 @@ import (
 
 // Rollup store page layout constants.
 const (
-	rollupHeaderSize         = 12 // num_buckets (uint32) + next_write_offset (uint32) + reserved (uint32)
+	rollupHeaderSize          = 12 // num_buckets (uint32) + next_write_offset (uint32) + reserved (uint32)
 	rollupBucketTimestampSize = 8  // int64
 	rollupPointCountSize      = 4  // uint32
 	rollupSumValueSize        = 8  // float64
@@ -45,7 +45,7 @@ type RollupManager struct {
 	rollupPager pager.Pager
 	resolutions []time.Duration // e.g. [1m, 5m]
 
-	mu           sync.Mutex
+	mu            sync.Mutex
 	currentPageID uint64
 	currentBody   []byte
 	opened        bool
@@ -73,9 +73,9 @@ func DefaultRollupConfig() RollupConfig {
 
 // Sentinel errors for rollup operations.
 var (
-	ErrRollupNotOpen      = errors.New("rollup: not open")
-	ErrRollupAlreadyOpen  = errors.New("rollup: already open")
-	ErrRollupNoSource     = errors.New("rollup: source store is nil")
+	ErrRollupNotOpen     = errors.New("rollup: not open")
+	ErrRollupAlreadyOpen = errors.New("rollup: already open")
+	ErrRollupNoSource    = errors.New("rollup: source store is nil")
 )
 
 // NewRollupManager creates a new rollup manager.

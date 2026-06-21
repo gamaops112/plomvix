@@ -16,22 +16,22 @@ import (
 
 // Page layout constants.
 const (
-	headerSize         = 8  // num_points (uint32) + next_write_offset (uint32)
-	pointTimestampSize = 8  // int64
-	pointTagsLenSize   = 2  // uint16
-	pointNameLenSize   = 2  // uint16
-	pointValueSize     = 8  // float64
+	headerSize         = 8 // num_points (uint32) + next_write_offset (uint32)
+	pointTimestampSize = 8 // int64
+	pointTagsLenSize   = 2 // uint16
+	pointNameLenSize   = 2 // uint16
+	pointValueSize     = 8 // float64
 	maxBodySize        = pager.DataPageBodySize
 )
 
 // Sentinel errors.
 var (
-	ErrStoreNotOpen       = errors.New("metrics store: not open")
-	ErrStoreAlreadyOpen   = errors.New("metrics store: already open")
-	ErrStoreClosed        = errors.New("metrics store: closed")
-	ErrRecordTooLarge     = errors.New("metrics store: record exceeds page body size")
-	ErrNoCurrentPage      = errors.New("metrics store: no current page allocated")
-	ErrCorruptPageHeader  = errors.New("metrics store: corrupt page header")
+	ErrStoreNotOpen      = errors.New("metrics store: not open")
+	ErrStoreAlreadyOpen  = errors.New("metrics store: already open")
+	ErrStoreClosed       = errors.New("metrics store: closed")
+	ErrRecordTooLarge    = errors.New("metrics store: record exceeds page body size")
+	ErrNoCurrentPage     = errors.New("metrics store: no current page allocated")
+	ErrCorruptPageHeader = errors.New("metrics store: corrupt page header")
 )
 
 // Point represents a single metric data point.
@@ -61,6 +61,7 @@ type MetricsStore struct {
 func NewStore(pg pager.Pager) *MetricsStore {
 	return NewStoreWithIndex(pg, nil)
 }
+
 // NewStoreWithIndex creates a MetricsStore with an optional TagIndex
 // for enterprise tag-filtered queries.
 func NewStoreWithIndex(pg pager.Pager, idx *TagIndex) *MetricsStore {

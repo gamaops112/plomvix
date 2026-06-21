@@ -11,11 +11,11 @@ import (
 // gorillaEncoder writes Gorilla-compressed timestamps and values to a
 // byte buffer using bit-level packing.
 type gorillaEncoder struct {
-	buf       []byte
-	bitPos    int // next bit position to write (0 = MSB of byte 0)
-	prevTime  int64
-	prevDelta int64
-	prevValue float64
+	buf          []byte
+	bitPos       int // next bit position to write (0 = MSB of byte 0)
+	prevTime     int64
+	prevDelta    int64
+	prevValue    float64
 	prevLeading  int
 	prevTrailing int
 	hasPrevTime  bool
@@ -150,11 +150,11 @@ func (e *gorillaEncoder) writeFloat(val float64) {
 // gorillaDecoder reads Gorilla-compressed timestamps and values from a
 // byte buffer using bit-level reading.
 type gorillaDecoder struct {
-	buf       []byte
-	bitPos    int // next bit position to read
-	prevTime  int64
-	prevDelta int64
-	prevValue float64
+	buf          []byte
+	bitPos       int // next bit position to read
+	prevTime     int64
+	prevDelta    int64
+	prevValue    float64
 	prevLeading  int
 	prevTrailing int
 	hasPrevTime  bool

@@ -46,14 +46,14 @@ type SQLConfig struct {
 
 // StoreConfig holds storage configuration.
 type StoreConfig struct {
-	DBPath         string `toml:"db_path"`
-	WALPath        string `toml:"wal_path"`
-	MetricsDBPath  string `toml:"metrics_db_path"`
-	RollupDBPath   string `toml:"metrics_rollup_db_path"`
-	TagIndexMemoryMB int  `toml:"tag_index_max_memory_mb"`
-	CacheSizeMB    int    `toml:"cache_size_mb"`
-	SyncWrites     bool   `toml:"sync_writes"`
-	MaxOpenFiles   int    `toml:"max_open_files"`
+	DBPath           string `toml:"db_path"`
+	WALPath          string `toml:"wal_path"`
+	MetricsDBPath    string `toml:"metrics_db_path"`
+	RollupDBPath     string `toml:"metrics_rollup_db_path"`
+	TagIndexMemoryMB int    `toml:"tag_index_max_memory_mb"`
+	CacheSizeMB      int    `toml:"cache_size_mb"`
+	SyncWrites       bool   `toml:"sync_writes"`
+	MaxOpenFiles     int    `toml:"max_open_files"`
 }
 
 // Default returns a Config populated with sensible default values.
@@ -77,14 +77,14 @@ func Default() Config {
 			VacuumQueueSize: 100,
 		},
 		Store: StoreConfig{
-			DBPath:          "data/plomvix.db",
-			WALPath:         "data/plomvix.wal",
-			MetricsDBPath:   "data/metrics.db",
-			RollupDBPath:    "data/metrics_rollups.db",
+			DBPath:           "data/plomvix.db",
+			WALPath:          "data/plomvix.wal",
+			MetricsDBPath:    "data/metrics.db",
+			RollupDBPath:     "data/metrics_rollups.db",
 			TagIndexMemoryMB: 128,
-			CacheSizeMB:     64,
-			SyncWrites:      true,
-			MaxOpenFiles:    256,
+			CacheSizeMB:      64,
+			SyncWrites:       true,
+			MaxOpenFiles:     256,
 		},
 	}
 }

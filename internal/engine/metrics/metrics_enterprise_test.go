@@ -258,8 +258,8 @@ func TestRollupDownsampleAndScan(t *testing.T) {
 func TestRollupBucketRoundTrip(t *testing.T) {
 	// Encode a rollup bucket manually and decode it.
 	body := make([]byte, pager.DataPageBodySize)
-	writeUint32LE(body, 0, 1)       // num_buckets
-	writeUint32LE(body, 4, 36+12)   // next_write_offset
+	writeUint32LE(body, 0, 1)     // num_buckets
+	writeUint32LE(body, 4, 36+12) // next_write_offset
 
 	off := 12
 	rb := RollupBucket{
