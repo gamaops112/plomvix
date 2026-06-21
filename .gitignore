@@ -2,6 +2,7 @@
 /plomvix
 /plomvixctl
 *.exe
+/build/
 graphify-out/
 # Data directory contents
 data/wal/**

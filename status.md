@@ -43,4 +43,5 @@ This table represents the **actual, locked-in roadmap** we have been building. I
 ***
 
 ### 🎯 Immediate Action Items & Future Milestones
-1. **Execute Plans 33, 34, 35 & 36 (Metrics & Logs Engines):** Hand the approved Metrics and Logs plans to the coding agent to build pluggable storage, Gorilla and ZSTD block compression, rollups, inverted indexes, and text search scans.
+1. **Verify Integrated Suite:** Perform integration checks validating that PostgreSQL PGWire queries execute successfully against both the Metrics and Logs engines.
+2. **Production Benchmarking:** Execute latency and volume tests to measure the storage footprint savings of Gorilla/ZSTD compression and search lookup scaling of the inverted index.
