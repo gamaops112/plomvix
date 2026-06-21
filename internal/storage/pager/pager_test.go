@@ -1975,9 +1975,9 @@ func TestCrashConsistency_HeaderCorruptedChecksum(t *testing.T) {
 // -- Documentation test (Task 12) --
 
 func TestStorageDocumentation(t *testing.T) {
-	data, err := os.ReadFile("../../../docs/storage.md")
+	data, err := os.ReadFile("../../../docs/markdown/storage.md")
 	if err != nil {
-		t.Fatalf("docs/storage.md not found: %v", err)
+		t.Fatalf("docs/markdown/storage.md not found: %v", err)
 	}
 	doc := string(data)
 	required := []string{
@@ -2001,7 +2001,7 @@ func TestStorageDocumentation(t *testing.T) {
 	}
 	for _, s := range required {
 		if !contains(doc, s) {
-			t.Errorf("missing required phrase in docs/storage.md: %q", s)
+			t.Errorf("missing required phrase in docs/markdown/storage.md: %q", s)
 		}
 	}
 }

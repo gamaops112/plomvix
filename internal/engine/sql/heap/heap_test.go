@@ -349,7 +349,7 @@ func TestConcurrent_Inserts(t *testing.T) {
 }
 
 func TestDocs_EnterprisePhrases(t *testing.T) {
-	data, _ := os.ReadFile("../../../../docs/sql_engine_heap.md")
+	data, _ := os.ReadFile("../../../../docs/markdown/sql_engine_heap.md")
 	doc := string(data)
 	for _, s := range []string{"Strict NOT NULL", "Primary Key Uniqueness", "Buffered Iterator", "Enterprise Roadmap"} {
 		if !containsStr(doc, s) {

@@ -323,9 +323,9 @@ func TestNew_SetsUpCorrectly(t *testing.T) {
 }
 
 func TestKVStore_DocsFileExists(t *testing.T) {
-	data, err := os.ReadFile("../../../../docs/sql_engine_kv.md")
+	data, err := os.ReadFile("../../../../docs/markdown/sql_engine_kv.md")
 	if err != nil {
-		t.Fatalf("docs/sql_engine_kv.md not found: %v", err)
+		t.Fatalf("docs/markdown/sql_engine_kv.md not found: %v", err)
 	}
 	doc := string(data)
 	required := []string{
@@ -344,7 +344,7 @@ func TestKVStore_DocsFileExists(t *testing.T) {
 	}
 	for _, s := range required {
 		if !containsStr(doc, s) {
-			t.Errorf("missing required phrase in docs/sql_engine_kv.md: %q", s)
+			t.Errorf("missing required phrase in docs/markdown/sql_engine_kv.md: %q", s)
 		}
 	}
 }

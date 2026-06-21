@@ -100,9 +100,9 @@ func TestCacheInvalidationOnDrop(t *testing.T) {
 
 // TestDocsDdlEnterprise verifies the enterprise docs contain required substrings.
 func TestDocsDdlEnterprise(t *testing.T) {
-	data, err := os.ReadFile("../../docs/ddl_enterprise.md")
+	data, err := os.ReadFile("../../docs/markdown/ddl_enterprise.md")
 	if err != nil {
-		t.Skip("docs/ddl_enterprise.md not found (run from repo root)")
+		t.Skip("docs/markdown/ddl_enterprise.md not found (run from repo root)")
 	}
 	content := string(data)
 	required := []string{
@@ -115,7 +115,7 @@ func TestDocsDdlEnterprise(t *testing.T) {
 	}
 	for _, s := range required {
 		if !strings.Contains(content, s) {
-			t.Errorf("docs/ddl_enterprise.md must contain substring %q", s)
+			t.Errorf("docs/markdown/ddl_enterprise.md must contain substring %q", s)
 		}
 	}
 }

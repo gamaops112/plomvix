@@ -225,9 +225,9 @@ func TestConcurrent_Parse(t *testing.T) {
 }
 
 func TestDocsFile(t *testing.T) {
-	data, err := os.ReadFile("../../docs/sql_parser.md")
+	data, err := os.ReadFile("../../docs/markdown/sql_parser.md")
 	if err != nil {
-		t.Skip("docs/sql_parser.md not yet created")
+		t.Skip("docs/markdown/sql_parser.md not yet created")
 	}
 	_ = data
 }

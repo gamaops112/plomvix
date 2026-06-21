@@ -268,9 +268,9 @@ func TestConcurrentAccess(t *testing.T) {
 }
 
 func TestDocumentation(t *testing.T) {
-	data, err := os.ReadFile("../../../../docs/sql_store.md")
+	data, err := os.ReadFile("../../../../docs/markdown/sql_store.md")
 	if err != nil {
-		t.Fatalf("docs/sql_store.md not found: %v", err)
+		t.Fatalf("docs/markdown/sql_store.md not found: %v", err)
 	}
 	c := string(data)
 	for _, s := range []string{

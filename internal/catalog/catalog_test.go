@@ -498,14 +498,14 @@ func TestConcurrent_TxIDMonotonic(t *testing.T) {
 // --- Docs test ---
 
 func TestCatalog_DocsFileExists(t *testing.T) {
-	data, err := os.ReadFile("../../docs/catalog.md")
+	data, err := os.ReadFile("../../docs/markdown/catalog.md")
 	if err != nil {
-		t.Skip("docs/catalog.md not yet created")
+		t.Skip("docs/markdown/catalog.md not yet created")
 	}
 	doc := string(data)
 	for _, s := range []string{"Global System Catalog", "Meta-First", "deep copy"} {
 		if !containsStr(doc, s) {
-			t.Errorf("missing phrase in docs/catalog.md: %q", s)
+			t.Errorf("missing phrase in docs/markdown/catalog.md: %q", s)
 		}
 	}
 }

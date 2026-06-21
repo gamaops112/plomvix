@@ -551,9 +551,9 @@ func TestStateTransitions(t *testing.T) {
 }
 
 func TestLifecycleDocumentation(t *testing.T) {
-	data, err := os.ReadFile("../../docs/lifecycle.md")
+	data, err := os.ReadFile("../../docs/markdown/lifecycle.md")
 	if err != nil {
-		t.Fatalf("docs/lifecycle.md not found: %v", err)
+		t.Fatalf("docs/markdown/lifecycle.md not found: %v", err)
 	}
 	content := string(data)
 
@@ -589,7 +589,7 @@ func TestLifecycleDocumentation(t *testing.T) {
 	}
 	for _, s := range required {
 		if !strings.Contains(content, s) {
-			t.Errorf("docs/lifecycle.md missing required string: %q", s)
+			t.Errorf("docs/markdown/lifecycle.md missing required string: %q", s)
 		}
 	}
 }

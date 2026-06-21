@@ -374,9 +374,9 @@ output = "stderr"
 }
 
 func TestRuntimeDocumentation(t *testing.T) {
-	data, err := os.ReadFile("../../docs/runtime.md")
+	data, err := os.ReadFile("../../docs/markdown/runtime.md")
 	if err != nil {
-		t.Fatalf("docs/runtime.md not found: %v", err)
+		t.Fatalf("docs/markdown/runtime.md not found: %v", err)
 	}
 	content := string(data)
 
@@ -416,7 +416,7 @@ func TestRuntimeDocumentation(t *testing.T) {
 	}
 	for _, s := range required {
 		if !strings.Contains(content, s) {
-			t.Errorf("docs/runtime.md missing required string: %q", s)
+			t.Errorf("docs/markdown/runtime.md missing required string: %q", s)
 		}
 	}
 }

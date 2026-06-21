@@ -170,9 +170,9 @@ func TestRedactAttr(t *testing.T) {
 }
 
 func TestLoggingDocumentation(t *testing.T) {
-	data, err := os.ReadFile("../../docs/logging.md")
+	data, err := os.ReadFile("../../docs/markdown/logging.md")
 	if err != nil {
-		t.Fatalf("docs/logging.md not found: %v", err)
+		t.Fatalf("docs/markdown/logging.md not found: %v", err)
 	}
 	content := string(data)
 
@@ -191,7 +191,7 @@ func TestLoggingDocumentation(t *testing.T) {
 	}
 	for _, s := range required {
 		if !strings.Contains(content, s) {
-			t.Errorf("docs/logging.md missing required string: %q", s)
+			t.Errorf("docs/markdown/logging.md missing required string: %q", s)
 		}
 	}
 }

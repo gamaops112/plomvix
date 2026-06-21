@@ -423,9 +423,9 @@ func TestSortCompositeInt64Ascending(t *testing.T) {
 }
 
 func TestDocumentation(t *testing.T) {
-	data, err := os.ReadFile("../../../../docs/sql_key.md")
+	data, err := os.ReadFile("../../../../docs/markdown/sql_key.md")
 	if err != nil {
-		t.Fatalf("docs/sql_key.md not found: %v", err)
+		t.Fatalf("docs/markdown/sql_key.md not found: %v", err)
 	}
 	c := string(data)
 	for _, s := range []string{
